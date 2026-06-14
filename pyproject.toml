@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "seer-ai"
-version = "1.0.0"
+version = "1.0.1"
 description = "SEER - Shell Enhanced Execution & Reasoning"
 readme = "README.md"
 license = { text = "MIT" }
