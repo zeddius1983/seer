@@ -20,6 +20,7 @@ CONTEXT_FILE = _cache_dir() / "context"
 DEFAULT_CONFIG = {
     "provider": "auto",
     "context_lines": 100,
+    "stream": False,
     "providers": {
         "llamacpp": {
             "type": "openai",
@@ -132,6 +133,7 @@ class Config:
     providers: dict
     context_lines: int = 100
     system_prompt: str = SYSTEM_PROMPT
+    stream: bool = False
 
     def get_active_provider(self) -> ProviderConfig:
         provider_name = self.provider
@@ -206,6 +208,7 @@ def load_config() -> Config:
         providers=merged["providers"],
         context_lines=merged.get("context_lines", 100),
         system_prompt=merged.get("system_prompt", SYSTEM_PROMPT),
+        stream=bool(merged.get("stream", False)),
     )
 
 
