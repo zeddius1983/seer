@@ -39,6 +39,12 @@ DEFAULT_CONFIG = {
             "api_key": "ollama",
             "model": "auto",
         },
+        "vllm": {
+            "type": "openai",
+            "base_url": "http://localhost:8000/v1",
+            "api_key": "vllm",
+            "model": "auto",
+        },
         "openai": {
             "type": "openai",
             "model": "gpt-4o",
