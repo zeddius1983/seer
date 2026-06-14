@@ -126,7 +126,7 @@ def build_prompt(question: str, context: Optional[str]) -> str:
     return question
 
 
-def stream_response(system: str, prompt: str, cfg, raw: bool = False) -> None:
+def stream_response(system: str, prompt: str, cfg, raw: bool = False, stream: bool = False) -> None:
     provider = get_provider(cfg.get_active_provider())
     buffer = ""
 
@@ -137,6 +137,27 @@ def stream_response(system: str, prompt: str, cfg, raw: bool = False) -> None:
         except KeyboardInterrupt:
             pass
         print()
+    elif stream:
+        # Streaming mode: render markdown incrementally as tokens arrive.
+        # "connecting…" placeholder gives immediate feedback before the first token.
+        # Lower refresh rate (6 Hz vs 12 Hz) reduces intermediate cursor redraws,
+        # which is the root cause of scroll-duplication artifacts in long responses.
+        console.print()
+        try:
+            with Live(
+                Text("  connecting…", style="dim"),
+                console=console,
+                refresh_per_second=6,
+                transient=False,
+            ) as live:
+                for chunk in provider.stream(system, prompt):
+                    buffer += chunk
+                    live.update(_get_padded_renderable(Markdown(buffer)))
+        except KeyboardInterrupt:
+            pass
+
+        if not buffer:
+            err_console.print("[yellow]No response received from provider.[/yellow]")
     else:
         # Buffered rich markdown rendering with dynamic spinner
         try:
@@ -170,6 +191,7 @@ def stream_response(system: str, prompt: str, cfg, raw: bool = False) -> None:
 @click.argument("query", nargs=-1)
 @click.option("--no-context", is_flag=True, help="Do not attach terminal context.")
 @click.option("--raw", "-r", is_flag=True, help="Stream raw text, disabling glow and rich rendering.")
+@click.option("--stream", "-s", is_flag=True, default=False, help="Stream tokens as they arrive instead of waiting for the full response.")
 @click.option("--provider", "-p", default=None, help="Override the active provider.")
 @click.option("--model", "-m", default=None, help="Override the model.")
 @click.option("--stats", is_flag=True, help="Show provider, model, context size, and system info.")
@@ -181,7 +203,7 @@ def stream_response(system: str, prompt: str, cfg, raw: bool = False) -> None:
     help="Print path to shell integration script (for sourcing).",
 )
 @click.pass_context
-def main(ctx, query, no_context, raw, provider, model, stats, show_context, shell_path):
+def main(ctx, query, no_context, raw, stream, provider, model, stats, show_context, shell_path):
     """seer — Shell Enhanced Execution & Reasoning.
 
     \b
@@ -298,7 +320,7 @@ def main(ctx, query, no_context, raw, provider, model, stats, show_context, shel
         if not got_eof:
             # Pipe is still open — enter watch mode
             focus = " ".join(args) if args and args not in (["help"], []) else None
-            _cmd_watch(first_batch, focus, cfg, raw)
+            _cmd_watch(first_batch, focus, cfg, raw, stream or cfg.stream)
             return
         # Regular pipe — use what we already read as context
         context = first_batch.strip() or None
@@ -321,7 +343,7 @@ def main(ctx, query, no_context, raw, provider, model, stats, show_context, shel
 
     try:
         system = cfg.system_prompt + "\n\n" + format_for_prompt()
-        stream_response(system, prompt, cfg, raw=raw)
+        stream_response(system, prompt, cfg, raw=raw, stream=stream or cfg.stream)
     except Exception as e:
         err_console.print(f"[red]Error:[/red] {e}")
         sys.exit(1)
@@ -337,7 +359,7 @@ WATCH_SYSTEM_PROMPT = (
 WATCH_INTERVAL = 15.0
 
 
-def _cmd_watch(first_batch: str, focus: Optional[str], cfg, raw: bool) -> None:
+def _cmd_watch(first_batch: str, focus: Optional[str], cfg, raw: bool, stream: bool = False) -> None:
     """Watch mode: process stdin in batches, sending each to the LLM."""
     system = WATCH_SYSTEM_PROMPT + "\n\n" + format_for_prompt()
     if focus:
@@ -349,7 +371,7 @@ def _cmd_watch(first_batch: str, focus: Optional[str], cfg, raw: bool) -> None:
         err_console.print(f"[dim]─── batch {n} ({'%.0f' % WATCH_INTERVAL}s window) ───[/dim]")
         prompt = f"Log lines:\n```\n{batch.strip()}\n```"
         try:
-            stream_response(system, prompt, cfg, raw=raw)
+            stream_response(system, prompt, cfg, raw=raw, stream=stream)
         except Exception as e:
             err_console.print(f"[red]Error:[/red] {e}")
 
