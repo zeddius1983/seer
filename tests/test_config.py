@@ -35,6 +35,13 @@ LLAMACPP = {
     "model": "auto",
 }
 
+VLLM = {
+    "type": "openai",
+    "base_url": "http://localhost:8000/v1",
+    "api_key": "vllm",
+    "model": "auto",
+}
+
 OPENAI_CLOUD = {
     "type": "openai",
     "model": "gpt-4o",
@@ -151,6 +158,18 @@ class TestAutoProvider:
         with patch("seer.config._list_openai_models", return_value=["gemma-3"]):
             pcfg = cfg.get_active_provider()
         assert pcfg.name == "lmstudio"
+
+    def test_discovers_vllm(self):
+        cfg = _make_config("auto", {"llamacpp": LLAMACPP, "lmstudio": LMSTUDIO, "ollama": OLLAMA, "vllm": VLLM})
+
+        def probe(base_url, api_key):
+            return ["mistral-7b"] if "8000" in base_url else []
+
+        with patch("seer.config._list_openai_models", side_effect=probe):
+            pcfg = cfg.get_active_provider()
+
+        assert pcfg.name == "vllm"
+        assert pcfg.base_url == "http://localhost:8000/v1"
 
 
 # ---------------------------------------------------------------------------

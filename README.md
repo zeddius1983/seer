@@ -194,9 +194,11 @@ providers:
 |---|---|---|
 | [LM Studio](https://lmstudio.ai) | `openai` | Default. Set `base_url: http://localhost:1234/v1` |
 | [Ollama](https://ollama.com) | `openai` | Set `base_url: http://localhost:11434/v1` |
+| [vLLM](https://github.com/vllm-project/vllm) | `openai` | Set `base_url: http://localhost:8000/v1` |
+| [llama.cpp](https://github.com/ggerganov/llama.cpp) | `openai` | Set `base_url: http://localhost:8080/v1` |
 | [OpenAI](https://platform.openai.com) | `openai` | Set `OPENAI_API_KEY` |
 | [Anthropic](https://anthropic.com) | `anthropic` | Set `ANTHROPIC_API_KEY` |
-| llama.cpp / vLLM / any OpenAI-compatible | `openai` | Set `base_url` to your server |
+| Any OpenAI-compatible endpoint | `openai` | Set `base_url` to your server |
 
 ---
 
