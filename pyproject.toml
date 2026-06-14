@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "seer"
+name = "seer-ai"
 version = "1.0.0"
 description = "SEER - Shell Enhanced Execution & Reasoning"
 readme = "README.md"

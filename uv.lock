@@ -346,7 +346,7 @@ wheels = [
 ]
 
 [[package]]
-name = "shai"
+name = "seer-ai"
 version = "1.0.0"
 source = { editable = "." }
 dependencies = [
