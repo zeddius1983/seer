@@ -11,6 +11,7 @@ import click
 from rich.console import Console
 from rich.live import Live
 from rich.markdown import Markdown
+from rich.segment import Segment
 from rich.text import Text
 
 from rich.panel import Panel
@@ -116,6 +117,26 @@ def _get_padded_renderable(renderable):
     return t
 
 
+class _TailRenderable:
+    """Render only the newest lines that fit in the terminal."""
+
+    def __init__(self, renderable):
+        self.renderable = renderable
+
+    def __rich_console__(self, render_console, options):
+        lines = render_console.render_lines(
+            self.renderable, options, style=None, pad=False
+        )
+        # Leave one row free so Live can redraw without scrolling the terminal
+        # and leaking previous frames into scrollback.
+        available_height = max(1, options.size.height - 1)
+        visible_lines = lines[-available_height:]
+        for index, line in enumerate(visible_lines):
+            yield from line
+            if index < len(visible_lines) - 1:
+                yield Segment.line()
+
+
 def build_prompt(question: str, context: Optional[str]) -> str:
     if context:
         return (
@@ -140,19 +161,32 @@ def stream_response(system: str, prompt: str, cfg, raw: bool = False, stream: bo
     elif stream:
         # Streaming mode: render markdown incrementally as tokens arrive.
         # "connecting…" placeholder gives immediate feedback before the first token.
-        # Lower refresh rate (6 Hz vs 12 Hz) reduces intermediate cursor redraws,
-        # which is the root cause of scroll-duplication artifacts in long responses.
+        # A bounded tail keeps new content visible without scrolling old redraws
+        # into the terminal's history. The complete response is printed once at
+        # the end after the transient live display is cleared.
         console.print()
         try:
-            with Live(
-                Text("  connecting…", style="dim"),
-                console=console,
-                refresh_per_second=6,
-                transient=False,
-            ) as live:
-                for chunk in provider.stream(system, prompt):
-                    buffer += chunk
-                    live.update(_get_padded_renderable(Markdown(buffer)))
+            try:
+                with Live(
+                    Text("  connecting…", style="dim"),
+                    console=console,
+                    refresh_per_second=6,
+                    transient=True,
+                    vertical_overflow="crop",
+                ) as live:
+                    try:
+                        for chunk in provider.stream(system, prompt):
+                            buffer += chunk
+                            renderable = _get_padded_renderable(Markdown(buffer))
+                            live.update(_TailRenderable(renderable))
+                    finally:
+                        # Replace the initial status before Live clears its
+                        # transient display, including on provider errors.
+                        if not buffer:
+                            live.update(Text(""))
+            finally:
+                if buffer:
+                    console.print(_get_padded_renderable(Markdown(buffer)))
         except KeyboardInterrupt:
             pass
 
