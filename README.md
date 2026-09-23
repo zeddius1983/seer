@@ -120,6 +120,10 @@ seer -r help
 # Use a specific provider or model for one query
 seer -p anthropic help
 seer -p openai -m gpt-4o how do I list listening ports
+
+# Use your installed Claude Code / Codex CLI (your own subscription)
+seer -p claude-cli help
+seer -p claude-cli -m haiku help
 ```
 
 ### Subcommands
@@ -199,6 +203,52 @@ providers:
 | [OpenAI](https://platform.openai.com) | `openai` | Set `OPENAI_API_KEY` |
 | [Anthropic](https://anthropic.com) | `anthropic` | Set `ANTHROPIC_API_KEY` |
 | Any OpenAI-compatible endpoint | `openai` | Set `base_url` to your server |
+| [Claude Code](https://code.claude.com) CLI | `claude-cli` | Opt-in. Uses your installed `claude` and its login |
+| [Codex](https://developers.openai.com/codex) CLI | `codex-cli` | Opt-in. Uses your installed `codex` and its login |
+
+### Subscription CLIs (Claude Code, Codex)
+
+If you have Claude Code or Codex installed and signed in, seer can use them
+instead of an API key. This is **off by default** and only happens if you choose it:
+
+```yaml
+# Use one explicitly…
+provider: claude-cli
+
+# …or let `provider: auto` fall back to them when no local server is running.
+# Local servers are always tried first.
+auto_cli: true                        # tries claude-cli, then codex-cli
+# auto_cli: [codex-cli, claude-cli]   # or set your own order / subset
+
+providers:
+  claude-cli:
+    type: claude-cli
+    model: sonnet             # haiku / sonnet / opus alias or a full model id
+  codex-cli:
+    type: codex-cli
+    # Tried in order: if a model isn't available on your plan, seer falls back
+    # to the next one. auto = the model from ~/.codex/config.toml
+    model: [gpt-6-luna, auto]
+    reasoning_effort: low     # passed as -c model_reasoning_effort=...
+    # command: /path/to/codex # optional, if the binary isn't on PATH
+```
+
+How it works:
+
+- seer runs the official, unmodified `claude -p` / `codex exec` binary. The CLI signs in
+  with your own account; seer never reads, stores, or forwards your credentials.
+- Tools are disabled (`claude --tools ""`, `codex --sandbox read-only`) and sessions
+  aren't saved, so the CLI only answers. It never runs commands or edits files.
+- Your terminal context is sent to Anthropic / OpenAI, and the requests count against
+  your plan's usage limits. `seer --stats` shows `(your subscription)` when one of these
+  providers is active.
+- `claude-cli` streams tokens and starts in a few seconds. `codex-cli` returns the whole
+  answer at once and is slower (~10s), because Codex adds its own agent prompt.
+
+> Using your subscription this way is subject to
+> [Anthropic's](https://code.claude.com/docs/en/legal-and-compliance) and
+> [OpenAI's](https://openai.com/policies/terms-of-use/) terms. If you want no
+> ambiguity, use the `anthropic` / `openai` providers with an API key.
 
 ---
 

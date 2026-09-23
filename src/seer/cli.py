@@ -19,7 +19,7 @@ from rich.syntax import Syntax
 from rich.table import Table
 
 from .config import load_config, save_default_config, CONFIG_PATH, DO_SYSTEM_PROMPT
-from .config import CONTEXT_FILE
+from .config import CONTEXT_FILE, CLI_COMMANDS, resolve_cli_command
 from .system_info import format_for_prompt, get_system_info
 from .context import get_context, read_stdin_batches, _stdin_has_data, _read_stdin_until_idle
 from .providers import get_provider
@@ -495,13 +495,25 @@ def _cmd_stats(provider_override, model_override):
     provider_display = (
         f"auto → {pcfg.name}" if cfg.provider == "auto" else cfg.provider
     )
-    model_display = (
-        f"auto → {pcfg.model}" if pcfg.model_was_auto else pcfg.model
-    )
+    is_cli = pcfg.type in CLI_COMMANDS
+    if is_cli:
+        provider_display += " [yellow](your subscription)[/yellow]"
+        model_display = " → ".join(
+            "[dim]CLI default[/dim]" if m == "auto" else m
+            for m in [pcfg.model, *pcfg.fallback_models]
+        )
+    else:
+        model_display = (
+            f"auto → {pcfg.model}" if pcfg.model_was_auto else pcfg.model
+        )
     t.add_row("Provider", provider_display)
     t.add_row("Type", pcfg.type)
     t.add_row("Model", model_display)
-    t.add_row("Base URL", pcfg.base_url or "[dim]default[/dim]")
+    if is_cli:
+        binary = resolve_cli_command(pcfg.type, pcfg.command)
+        t.add_row("Binary", binary or "[red]not found on PATH[/red]")
+    else:
+        t.add_row("Base URL", pcfg.base_url or "[dim]default[/dim]")
     t.add_row("", "")
     t.add_row("Context limit", f"{cfg.context_lines} lines (max)")
     t.add_row("Context captured", f"{context_lines_actual} lines · {context_chars} chars · ~{est_tokens} tokens")
