@@ -77,14 +77,23 @@ curl -fsSL https://raw.githubusercontent.com/zeddius1983/seer/main/install.sh | 
 
 ## Usage
 
-### Implicit Mode (Ctrl+Space)
+### Implicit Mode (Ctrl+G)
 
-Implicit mode is installed automatically with seer. Type any question directly into your terminal and press `Ctrl+Space`:
+Implicit mode is installed automatically with seer. Type any question directly into your terminal and press `Ctrl+G`:
 
 ```bash
-find the largest file in this folder[Press Ctrl+Space]
+find the largest file in this folder[Press Ctrl+G]
 # Instantly expands and runs: seer find the largest file in this folder
 ```
+
+To use a different key, set `SEER_IMPLICIT_BIND` (zsh `bindkey` notation) when installing:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/zeddius1983/seer/main/install.sh | SEER_IMPLICIT_BIND='^@' bash   # Ctrl+Space
+```
+
+> Before v1.1.0 the default was `Ctrl+Space`, which clashes with global hotkeys in some
+> apps (e.g. OpenClaw) and macOS input-source switching. Re-run the installer to switch.
 
 ### Standard Commands
 

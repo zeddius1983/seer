@@ -87,3 +87,14 @@ def test_streaming_clears_connecting_status_when_no_content_arrives(failure):
     final_update = _RecordingLive.instances[0].updates[-1]
     assert isinstance(final_update, Text)
     assert final_update.plain == ""
+
+
+def test_help_and_version_show_seer_version():
+    from click.testing import CliRunner
+    from seer import __version__
+    from seer.cli import main
+
+    runner = CliRunner()
+    assert f"seer v{__version__}" in runner.invoke(main, ["--help"]).output
+    for flag in ("--version", "-V"):
+        assert runner.invoke(main, [flag]).output.strip() == f"seer, version {__version__}"

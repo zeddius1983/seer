@@ -18,6 +18,7 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
 
+from . import __version__
 from .config import load_config, save_default_config, CONFIG_PATH, DO_SYSTEM_PROMPT
 from .config import CONTEXT_FILE, CLI_COMMANDS, resolve_cli_command
 from .system_info import format_for_prompt, get_system_info
@@ -215,7 +216,20 @@ def stream_response(system: str, prompt: str, cfg, raw: bool = False, stream: bo
             err_console.print("[yellow]No response received from provider.[/yellow]")
 
 
+HELP_TEXT = f"""seer v{__version__} — Shell Enhanced Execution & Reasoning.
+
+\b
+Examples:
+  seer help                    # explain the last error in your terminal
+  seer how do I list open ports
+  git pull-request 2>&1 | seer # pipe any output as context
+  seer config                  # show/init config file
+  seer --stats                 # show provider, model, and system info
+"""
+
+
 @click.command(
+    help=HELP_TEXT,
     context_settings={
         "ignore_unknown_options": True,
         "allow_extra_args": True,
@@ -236,18 +250,9 @@ def stream_response(system: str, prompt: str, cfg, raw: bool = False, stream: bo
     default=None,
     help="Print path to shell integration script (for sourcing).",
 )
+@click.version_option(__version__, "--version", "-V", prog_name="seer")
 @click.pass_context
 def main(ctx, query, no_context, raw, stream, provider, model, stats, show_context, shell_path):
-    """seer — Shell Enhanced Execution & Reasoning.
-
-    \b
-    Examples:
-      seer help                    # explain the last error in your terminal
-      seer how do I list open ports
-      git pull-request 2>&1 | seer # pipe any output as context
-      seer config                  # show/init config file
-      seer --stats                 # show provider, model, and system info
-    """
     # --shell-path: print path to the integration script
     if shell_path:
         script = Path(__file__).parent / "shell" / f"seer.{shell_path}"
