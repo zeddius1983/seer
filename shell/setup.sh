@@ -128,9 +128,18 @@ install_seer() {
   ok "seer installed"
 }
 
+# Human-readable label for a zsh bindkey sequence, e.g. ^G → Ctrl+G
+_bind_label() {
+  case "$1" in
+    "^@") echo "Ctrl+Space" ;;
+    "^"?) echo "Ctrl+$(printf '%s' "${1#^}" | tr '[:lower:]' '[:upper:]')" ;;
+    *) echo "$1" ;;
+  esac
+}
+
 install_seer_implicit() {
-  local bind="${SEER_IMPLICIT_BIND:-^@}"
-  step "Installing implicit mode (Ctrl+Space → seer)..."
+  local bind="${SEER_IMPLICIT_BIND:-^G}"
+  step "Installing implicit mode ($(_bind_label "$bind") → seer)..."
   _zshrc_remove "seer-implicit"
   _zshrc_add "seer-implicit" \
     "function _seer_implicit_mode() {" \

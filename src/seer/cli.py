@@ -18,8 +18,9 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
 
+from . import __version__
 from .config import load_config, save_default_config, CONFIG_PATH, DO_SYSTEM_PROMPT
-from .config import CONTEXT_FILE
+from .config import CONTEXT_FILE, CLI_COMMANDS, resolve_cli_command
 from .system_info import format_for_prompt, get_system_info
 from .context import get_context, read_stdin_batches, _stdin_has_data, _read_stdin_until_idle
 from .providers import get_provider
@@ -215,7 +216,20 @@ def stream_response(system: str, prompt: str, cfg, raw: bool = False, stream: bo
             err_console.print("[yellow]No response received from provider.[/yellow]")
 
 
+HELP_TEXT = f"""seer v{__version__} — Shell Enhanced Execution & Reasoning.
+
+\b
+Examples:
+  seer help                    # explain the last error in your terminal
+  seer how do I list open ports
+  git pull-request 2>&1 | seer # pipe any output as context
+  seer config                  # show/init config file
+  seer --stats                 # show provider, model, and system info
+"""
+
+
 @click.command(
+    help=HELP_TEXT,
     context_settings={
         "ignore_unknown_options": True,
         "allow_extra_args": True,
@@ -236,18 +250,9 @@ def stream_response(system: str, prompt: str, cfg, raw: bool = False, stream: bo
     default=None,
     help="Print path to shell integration script (for sourcing).",
 )
+@click.version_option(__version__, "--version", "-V", prog_name="seer")
 @click.pass_context
 def main(ctx, query, no_context, raw, stream, provider, model, stats, show_context, shell_path):
-    """seer — Shell Enhanced Execution & Reasoning.
-
-    \b
-    Examples:
-      seer help                    # explain the last error in your terminal
-      seer how do I list open ports
-      git pull-request 2>&1 | seer # pipe any output as context
-      seer config                  # show/init config file
-      seer --stats                 # show provider, model, and system info
-    """
     # --shell-path: print path to the integration script
     if shell_path:
         script = Path(__file__).parent / "shell" / f"seer.{shell_path}"
@@ -495,13 +500,25 @@ def _cmd_stats(provider_override, model_override):
     provider_display = (
         f"auto → {pcfg.name}" if cfg.provider == "auto" else cfg.provider
     )
-    model_display = (
-        f"auto → {pcfg.model}" if pcfg.model_was_auto else pcfg.model
-    )
+    is_cli = pcfg.type in CLI_COMMANDS
+    if is_cli:
+        provider_display += " [yellow](your subscription)[/yellow]"
+        model_display = " → ".join(
+            "[dim]CLI default[/dim]" if m == "auto" else m
+            for m in [pcfg.model, *pcfg.fallback_models]
+        )
+    else:
+        model_display = (
+            f"auto → {pcfg.model}" if pcfg.model_was_auto else pcfg.model
+        )
     t.add_row("Provider", provider_display)
     t.add_row("Type", pcfg.type)
     t.add_row("Model", model_display)
-    t.add_row("Base URL", pcfg.base_url or "[dim]default[/dim]")
+    if is_cli:
+        binary = resolve_cli_command(pcfg.type, pcfg.command)
+        t.add_row("Binary", binary or "[red]not found on PATH[/red]")
+    else:
+        t.add_row("Base URL", pcfg.base_url or "[dim]default[/dim]")
     t.add_row("", "")
     t.add_row("Context limit", f"{cfg.context_lines} lines (max)")
     t.add_row("Context captured", f"{context_lines_actual} lines · {context_chars} chars · ~{est_tokens} tokens")

@@ -250,3 +250,102 @@ class TestExplicitProvider:
         cfg = _make_config("missing", {"lmstudio": LMSTUDIO})
         with pytest.raises(ValueError, match="not found in config"):
             cfg.get_active_provider()
+
+
+# ---------------------------------------------------------------------------
+# Subscription CLI providers (claude-cli / codex-cli) — opt-in only
+# ---------------------------------------------------------------------------
+
+CLAUDE_CLI = {"type": "claude-cli", "model": "sonnet"}
+CODEX_CLI = {"type": "codex-cli", "model": "auto", "reasoning_effort": "low"}
+CODEX_CLI_FALLBACK = {"type": "codex-cli", "model": ["gpt-6-luna", "auto"]}
+
+
+def _cli_config(auto_cli, providers=None) -> Config:
+    providers = providers or {
+        "lmstudio": LMSTUDIO,
+        "claude-cli": CLAUDE_CLI,
+        "codex-cli": CODEX_CLI,
+    }
+    return Config(provider="auto", providers=providers, auto_cli=auto_cli)
+
+
+def _which_all(name):
+    return f"/usr/bin/{name}"
+
+
+class TestAutoCLI:
+    def test_cli_never_used_without_opt_in(self):
+        cfg = _cli_config(False)
+        with patch("seer.config._list_openai_models", return_value=[]), \
+             patch("seer.config.shutil.which", side_effect=_which_all):
+            with pytest.raises(ValueError, match="auto_cli"):
+                cfg.get_active_provider()
+
+    def test_local_server_preferred_over_cli(self):
+        cfg = _cli_config(True)
+        with patch("seer.config._list_openai_models", return_value=["gemma-3"]), \
+             patch("seer.config.shutil.which", side_effect=_which_all):
+            assert cfg.get_active_provider().name == "lmstudio"
+
+    def test_true_prefers_claude_then_codex(self):
+        cfg = _cli_config(True)
+        with patch("seer.config._list_openai_models", return_value=[]), \
+             patch("seer.config.shutil.which", side_effect=_which_all):
+            assert cfg.get_active_provider().name == "claude-cli"
+
+    def test_falls_back_to_codex_when_claude_missing(self):
+        cfg = _cli_config(True)
+        which = lambda name: "/usr/bin/codex" if name == "codex" else None
+        with patch("seer.config._list_openai_models", return_value=[]), \
+             patch("seer.config.shutil.which", side_effect=which):
+            assert cfg.get_active_provider().name == "codex-cli"
+
+    def test_list_sets_priority(self):
+        cfg = _cli_config(["codex-cli", "claude-cli"])
+        with patch("seer.config._list_openai_models", return_value=[]), \
+             patch("seer.config.shutil.which", side_effect=_which_all):
+            assert cfg.get_active_provider().name == "codex-cli"
+
+    def test_list_limits_candidates(self):
+        cfg = _cli_config(["codex-cli"])
+        which = lambda name: "/usr/bin/claude" if name == "claude" else None
+        with patch("seer.config._list_openai_models", return_value=[]), \
+             patch("seer.config.shutil.which", side_effect=which):
+            with pytest.raises(ValueError, match="no configured provider is reachable"):
+                cfg.get_active_provider()
+
+    def test_custom_command_is_checked(self):
+        providers = {"claude-cli": {**CLAUDE_CLI, "command": "/opt/claude"}}
+        cfg = _cli_config(True, providers)
+        with patch("seer.config.shutil.which", return_value="/opt/claude") as which:
+            cfg.get_active_provider()
+        which.assert_called_with("/opt/claude")
+
+    def test_model_auto_does_not_probe_for_cli(self):
+        cfg = Config(provider="codex-cli", providers={"codex-cli": CODEX_CLI})
+        with patch("seer.config._list_openai_models") as probe:
+            pcfg = cfg.get_active_provider()
+        probe.assert_not_called()
+        assert pcfg.model == "auto"
+        assert pcfg.model_was_auto is True
+        assert pcfg.reasoning_effort == "low"
+
+    def test_explicit_cli_provider(self):
+        cfg = Config(provider="claude-cli", providers={"claude-cli": CLAUDE_CLI})
+        pcfg = cfg.get_active_provider()
+        assert pcfg.type == "claude-cli"
+        assert pcfg.model == "sonnet"
+
+    def test_model_list_becomes_primary_plus_fallbacks(self):
+        cfg = Config(provider="codex-cli", providers={"codex-cli": CODEX_CLI_FALLBACK})
+        pcfg = cfg.get_active_provider()
+        assert pcfg.model == "gpt-6-luna"
+        assert pcfg.fallback_models == ["auto"]
+        assert pcfg.model_was_auto is False
+
+    def test_default_codex_prefers_gpt_6_luna_low_effort(self):
+        from seer.config import DEFAULT_CONFIG
+        codex = DEFAULT_CONFIG["providers"]["codex-cli"]
+        assert codex["model"] == ["gpt-6-luna", "auto"]
+        assert codex["reasoning_effort"] == "low"

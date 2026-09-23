@@ -1,6 +1,7 @@
 import os
+import shutil
 import yaml
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
@@ -17,10 +18,21 @@ def _cache_dir() -> Path:
 
 CONTEXT_FILE = _cache_dir() / "context"
 
+CLI_COMMANDS = {"claude-cli": "claude", "codex-cli": "codex"}
+
+
+def resolve_cli_command(provider_type: str, command: Optional[str] = None) -> Optional[str]:
+    """Return the absolute path of a subscription CLI binary, or None if not installed."""
+    return shutil.which(command or CLI_COMMANDS.get(provider_type, ""))
+
+
 DEFAULT_CONFIG = {
     "provider": "auto",
     "context_lines": 100,
     "stream": False,
+    # Opt-in: let `provider: auto` fall back to your own Claude Code / Codex CLI
+    # subscription when no local server is running. false | true | [ordered list]
+    "auto_cli": False,
     "providers": {
         "llamacpp": {
             "type": "openai",
@@ -55,6 +67,19 @@ DEFAULT_CONFIG = {
             "type": "anthropic",
             "model": "claude-sonnet-4-6",
             # api_key: set via ANTHROPIC_API_KEY env var or here
+        },
+        # Subscription CLIs: run your installed `claude` / `codex` with your own login.
+        # Never used unless selected explicitly or listed in auto_cli.
+        "claude-cli": {
+            "type": "claude-cli",
+            "model": "sonnet",          # alias (haiku / sonnet / opus) or full model id
+        },
+        "codex-cli": {
+            "type": "codex-cli",
+            # Tried in order; falls back to the next one if a model is unavailable.
+            # auto = the model set in ~/.codex/config.toml
+            "model": ["gpt-6-luna", "auto"],
+            "reasoning_effort": "low",
         },
     },
 }
@@ -125,6 +150,9 @@ class ProviderConfig:
     base_url: Optional[str] = None
     name: Optional[str] = None        # resolved provider key (set when auto-resolved)
     model_was_auto: bool = False      # True when model was resolved from "auto"
+    command: Optional[str] = None     # CLI providers: binary name/path override
+    reasoning_effort: Optional[str] = None  # codex-cli only
+    fallback_models: list[str] = field(default_factory=list)  # CLI providers: tried if `model` is unavailable
 
 
 @dataclass
@@ -134,6 +162,16 @@ class Config:
     context_lines: int = 100
     system_prompt: str = SYSTEM_PROMPT
     stream: bool = False
+    auto_cli: object = False          # False | True | list of CLI provider names
+
+    def _auto_cli_order(self) -> list[str]:
+        if self.auto_cli is True:
+            return list(CLI_COMMANDS)
+        if isinstance(self.auto_cli, str):
+            return [self.auto_cli]
+        if isinstance(self.auto_cli, list):
+            return [str(n) for n in self.auto_cli]
+        return []
 
     def get_active_provider(self) -> ProviderConfig:
         provider_name = self.provider
@@ -144,8 +182,9 @@ class Config:
             if provider_name is None:
                 raise ValueError(
                     "provider: auto — no configured provider is reachable.\n"
-                    "Start a local LLM server (llama.cpp, LM Studio, Ollama) "
-                    "or set a specific provider in your config."
+                    "Start a local LLM server (llama.cpp, LM Studio, Ollama), "
+                    "set a specific provider in your config, or opt in to your "
+                    "Claude Code / Codex subscription with `auto_cli: true`."
                 )
 
         if provider_name not in self.providers:
@@ -155,10 +194,16 @@ class Config:
             )
 
         raw = self.providers[provider_name]
+        ptype = raw.get("type", "openai")
         model = raw.get("model", "")
+        fallback_models: list[str] = []
+        # CLI providers accept an ordered list of models to fall back through.
+        if isinstance(model, list) and ptype in CLI_COMMANDS:
+            model, *fallback_models = [str(m) for m in model] or ["auto"]
         model_was_auto = model == "auto"
 
-        if model_was_auto:
+        # CLI providers: "auto" means "let the CLI use its own default model".
+        if model_was_auto and ptype not in CLI_COMMANDS:
             models = prefetched_models or _list_openai_models(
                 raw.get("base_url", ""), raw.get("api_key", "no-key")
             )
@@ -169,12 +214,15 @@ class Config:
             model = models[0]
 
         return ProviderConfig(
-            type=raw.get("type", "openai"),
+            type=ptype,
             model=model,
             api_key=raw.get("api_key"),
             base_url=raw.get("base_url"),
             name=provider_name,
             model_was_auto=model_was_auto,
+            command=raw.get("command"),
+            reasoning_effort=raw.get("reasoning_effort"),
+            fallback_models=fallback_models,
         )
 
     def _resolve_auto_provider(self) -> tuple[Optional[str], list[str]]:
@@ -185,6 +233,13 @@ class Config:
             models = _list_openai_models(raw["base_url"], raw.get("api_key", "no-key"))
             if models:
                 return name, models
+        # Local servers first; subscription CLIs only if the user opted in.
+        for name in self._auto_cli_order():
+            raw = self.providers.get(name)
+            if not raw or raw.get("type") not in CLI_COMMANDS:
+                continue
+            if resolve_cli_command(raw["type"], raw.get("command")):
+                return name, []
         return None, []
 
 
@@ -209,6 +264,7 @@ def load_config() -> Config:
         context_lines=merged.get("context_lines", 100),
         system_prompt=merged.get("system_prompt", SYSTEM_PROMPT),
         stream=bool(merged.get("stream", False)),
+        auto_cli=merged.get("auto_cli", False),
     )
 
 
