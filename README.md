@@ -42,16 +42,16 @@ curl -fsSL https://raw.githubusercontent.com/zeddius1983/seer/main/install.sh | 
 
 ```bash
 # By version tag
-curl -fsSL https://raw.githubusercontent.com/zeddius1983/seer/main/install.sh | bash -s -- --version v1.1.0
+curl -fsSL https://raw.githubusercontent.com/zeddius1983/seer/main/install.sh | bash -s -- --version v1.2.0
 
 # By branch
-curl -fsSL https://raw.githubusercontent.com/zeddius1983/seer/main/install.sh | bash -s -- --version feature/v1.1.0
+curl -fsSL https://raw.githubusercontent.com/zeddius1983/seer/main/install.sh | bash -s -- --version feature/v1.2.0
 ```
 
 `--version` accepts any git ref (tag, branch, or SHA). It can be combined with other flags:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/zeddius1983/seer/main/install.sh | bash -s -- --version v1.1.0 --all
+curl -fsSL https://raw.githubusercontent.com/zeddius1983/seer/main/install.sh | bash -s -- --version v1.2.0 --all
 ```
 
 > **Note:** Whenever `~/.zshrc` is modified, a backup is created first as `~/.zshrc.YYYYMMDD_HHMMSS.bak`.
@@ -92,8 +92,46 @@ To use a different key, set `SEER_IMPLICIT_BIND` (zsh `bindkey` notation) when i
 curl -fsSL https://raw.githubusercontent.com/zeddius1983/seer/main/install.sh | SEER_IMPLICIT_BIND='^@' bash   # Ctrl+Space
 ```
 
+With `brave: true` in your config, `Ctrl+G` runs the query in [brave mode](#brave-mode) — seer does the job instead of explaining how.
+
 > Before v1.1.0 the default was `Ctrl+Space`, which clashes with global hotkeys in some
 > apps (e.g. OpenClaw) and macOS input-source switching. Re-run the installer to switch.
+
+### Brave Mode
+
+Let seer do the job itself: it runs the commands it needs, reads their output, and answers with the result.
+
+```
+$ seer -b find the largest 5 files here and show them in a table
+  $ find . -type f -exec stat -f '%z %N' {} + | sort -rn | head -5
+
+     Rank  Size      File
+     1     55,787 B  ./uv.lock
+     ...
+```
+
+- **Read-only commands run immediately** — `ls`, `du`, `find`, `grep`, `ps`, `git log`, … Each one is shown as it runs.
+- **Anything that changes something asks first** with the same `[Y/n/e]` prompt as `seer do`. Answer `n` and seer stops there, telling you what wasn't done and the command to run yourself.
+- Commands run non-interactively in your current directory with a 60s timeout, for at most 6 steps. `Ctrl+C` stops at any point.
+
+How strict the "asks first" is, is up to you:
+
+```yaml
+brave_confirm: auto     # default: ask unless the command is known to be read-only
+# brave_confirm: trust  # ask only for known-destructive commands: rm, mv, sudo, > file,
+#                       # find -delete, sed -i, git push/reset, package installs, …
+# brave_confirm: always # ask for every command
+```
+
+In every mode the model also flags commands it knows will change something, and those always ask. The model can add confirmations but never skip them, because the model can misjudge a command, and text in command output (a file, a commit message, a web page) can try to talk it into running something harmful.
+
+Make it the default for free-form queries (including `Ctrl+G`) in `~/.config/seer/config.yaml`:
+
+```yaml
+brave: true
+```
+
+`seer --no-brave <query>` skips it for one query. `seer help`, `seer do` and piped input are never affected.
 
 ### Standard Commands
 
@@ -151,6 +189,7 @@ seer -p claude-cli -m haiku help
 |---|---|---|
 | `--no-context` | | Skip attaching terminal context |
 | `--raw` | `-r` | Disable glow and rich rendering, stream plain text |
+| `--brave` / `--no-brave` | `-b` | Force [brave mode](#brave-mode) on or off for this query |
 | `--provider <name>` | `-p` | Override the active provider for this query |
 | `--model <name>` | `-m` | Override the model for this query |
 

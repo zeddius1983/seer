@@ -19,11 +19,12 @@ from rich.syntax import Syntax
 from rich.table import Table
 
 from . import __version__
-from .config import load_config, save_default_config, CONFIG_PATH, DO_SYSTEM_PROMPT
+from .config import load_config, save_default_config, CONFIG_PATH, DO_SYSTEM_PROMPT, BRAVE_SYSTEM_PROMPT
 from .config import CONTEXT_FILE, CLI_COMMANDS, resolve_cli_command
 from .system_info import format_for_prompt, get_system_info
 from .context import get_context, read_stdin_batches, _stdin_has_data, _read_stdin_until_idle
 from .providers import get_provider
+from .brave import CommandResult, run_brave
 console = Console()
 err_console = Console(stderr=True)
 
@@ -98,6 +99,26 @@ def _edit_inline(command: str) -> str:
     finally:
         if tmpfile and os.path.exists(tmpfile):
             os.unlink(tmpfile)
+
+
+def _command_panel(command: str):
+    return _get_padded_renderable(Panel(Syntax(command, "bash", theme="ansi_dark"), border_style="cyan"))
+
+
+def _confirm_command(command: str) -> Optional[str]:
+    """Show command and ask [Y/n/e]. Returns the (possibly edited) command, or None if declined."""
+    console.print(_command_panel(command))
+    while True:
+        choice = click.prompt("Run this command? [Y/n/e]", default="y").strip().lower()
+        if choice in ("y", ""):
+            return command
+        elif choice == "n":
+            return None
+        elif choice == "e":
+            command = _edit_inline(command)
+            console.print(_command_panel(command))
+        else:
+            console.print("[dim]Enter y, n, or e[/dim]")
 
 
 def _unwrap_markdown_fence(text: str) -> str:
@@ -222,6 +243,7 @@ HELP_TEXT = f"""seer v{__version__} — Shell Enhanced Execution & Reasoning.
 Examples:
   seer help                    # explain the last error in your terminal
   seer how do I list open ports
+  seer -b largest file here    # brave: seer runs the commands itself
   git pull-request 2>&1 | seer # pipe any output as context
   seer config                  # show/init config file
   seer --stats                 # show provider, model, and system info
@@ -239,6 +261,7 @@ Examples:
 @click.argument("query", nargs=-1)
 @click.option("--no-context", is_flag=True, help="Do not attach terminal context.")
 @click.option("--raw", "-r", is_flag=True, help="Stream raw text, disabling glow and rich rendering.")
+@click.option("--brave/--no-brave", "-b", default=None, help="Brave mode: let seer run the commands needed to answer (overrides the `brave` config setting).")
 @click.option("--stream", "-s", is_flag=True, default=False, help="Stream tokens as they arrive instead of waiting for the full response.")
 @click.option("--provider", "-p", default=None, help="Override the active provider.")
 @click.option("--model", "-m", default=None, help="Override the model.")
@@ -252,7 +275,7 @@ Examples:
 )
 @click.version_option(__version__, "--version", "-V", prog_name="seer")
 @click.pass_context
-def main(ctx, query, no_context, raw, stream, provider, model, stats, show_context, shell_path):
+def main(ctx, query, no_context, raw, brave, stream, provider, model, stats, show_context, shell_path):
     # --shell-path: print path to the integration script
     if shell_path:
         script = Path(__file__).parent / "shell" / f"seer.{shell_path}"
@@ -325,21 +348,10 @@ def main(ctx, query, no_context, raw, stream, provider, model, stats, show_conte
 
             if explanation:
                 console.print(_get_padded_renderable(Markdown(explanation)))
-            console.print(_get_padded_renderable(Panel(Syntax(command, "bash", theme="ansi_dark"), border_style="cyan")))
-
-            while True:
-                choice = click.prompt("Run this command? [Y/n/e]", default="y").strip().lower()
-                if choice in ("y", ""):
-                    console.print()
-                    _run_shell_command(command)
-                    break
-                elif choice == "n":
-                    break
-                elif choice == "e":
-                    command = _edit_inline(command)
-                    console.print(_get_padded_renderable(Panel(Syntax(command, "bash", theme="ansi_dark"), border_style="cyan")))
-                else:
-                    console.print("[dim]Enter y, n, or e[/dim]")
+            command = _confirm_command(command)
+            if command:
+                console.print()
+                _run_shell_command(command)
         except Exception as e:
             err_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
@@ -347,6 +359,16 @@ def main(ctx, query, no_context, raw, stream, provider, model, stats, show_conte
 
     # Determine mode: help (analyse context for errors) vs question (answer directly)
     is_help = args in ([], ["help"])
+
+    # Brave mode: free-form queries only — not help, and not piped input.
+    use_brave = cfg.brave if brave is None else brave
+    if use_brave and not is_help and not _stdin_has_data():
+        try:
+            _cmd_brave(" ".join(args), cfg, raw)
+        except Exception as e:
+            err_console.print(f"[red]Error:[/red] {e}")
+            sys.exit(1)
+        return
 
     if is_help:
         question = "What went wrong in my terminal session above? How do I fix it?"
@@ -386,6 +408,55 @@ def main(ctx, query, no_context, raw, stream, provider, model, stats, show_conte
     except Exception as e:
         err_console.print(f"[red]Error:[/red] {e}")
         sys.exit(1)
+
+
+def _cmd_brave(task: str, cfg, raw: bool) -> None:
+    """Brave mode: let the LLM run commands, then render its final answer."""
+    llm = get_provider(cfg.get_active_provider())
+    system = (
+        BRAVE_SYSTEM_PROMPT + "\n\n" + format_for_prompt()
+        + f"\n\nWorking directory: {os.getcwd()}"
+    )
+
+    def complete(prompt: str) -> str:
+        buffer = ""
+        with Live(
+            Text("  thinking…", style="dim"),
+            console=err_console,
+            refresh_per_second=12,
+            transient=True,
+        ) as live:
+            for chunk in llm.stream(system, prompt):
+                buffer += chunk
+                live.update(Text(f"  thinking… ({len(buffer.split())} words)", style="dim"))
+        return buffer
+
+    def on_command(command: str) -> None:
+        err_console.print(Text(f"  $ {command}", style="dim"), highlight=False)
+
+    def on_result(result: CommandResult) -> None:
+        if result.exit_code is None:
+            err_console.print("[dim yellow]    timed out[/dim yellow]")
+        elif result.exit_code != 0:
+            err_console.print(f"[dim yellow]    exit code {result.exit_code}[/dim yellow]")
+
+    err_console.print()
+    try:
+        answer = run_brave(
+            task, complete, _confirm_command, on_command, on_result,
+            confirm_policy=cfg.brave_confirm,
+        )
+    except (KeyboardInterrupt, click.Abort):   # Ctrl+C / Ctrl+D, incl. at the [Y/n/e] prompt
+        err_console.print("\n[dim]Brave mode interrupted.[/dim]")
+        return
+
+    answer = _unwrap_markdown_fence(answer).strip()
+    if not answer:
+        err_console.print("[yellow]No response received from provider.[/yellow]")
+    elif raw:
+        print(answer)
+    else:
+        console.print(_get_padded_renderable(Markdown(answer)))
 
 
 WATCH_SYSTEM_PROMPT = (
@@ -520,6 +591,7 @@ def _cmd_stats(provider_override, model_override):
     else:
         t.add_row("Base URL", pcfg.base_url or "[dim]default[/dim]")
     t.add_row("", "")
+    t.add_row("Brave mode", f"{'on' if cfg.brave else 'off'} · confirm: {cfg.brave_confirm}")
     t.add_row("Context limit", f"{cfg.context_lines} lines (max)")
     t.add_row("Context captured", f"{context_lines_actual} lines · {context_chars} chars · ~{est_tokens} tokens")
     t.add_row("System prompt", f"~{system_tokens} tokens")
