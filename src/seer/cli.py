@@ -101,8 +101,61 @@ def _edit_inline(command: str) -> str:
             os.unlink(tmpfile)
 
 
+def _split_at_operators(command: str) -> list[str]:
+    """Split a one-line command before each top-level |, ||, &&, ; — the
+    operator starts the next part. Operators in quotes or $(…) are left alone."""
+    parts: list[str] = []
+    start = depth = i = 0
+    quote = ""
+    while i < len(command):
+        ch = command[i]
+        if ch == "\\" and quote != "'":
+            i += 2
+            continue
+        if quote:
+            if ch == quote:
+                quote = ""
+        elif ch in "'\"":
+            quote = ch
+        elif ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth = max(0, depth - 1)
+        elif depth == 0 and (
+            command.startswith(("&&", "||"), i)
+            or (ch in "|;" and command[i - 1:i] not in (">", "&"))
+        ):
+            parts.append(command[start:i].strip())
+            start = i
+            i += 2 if command.startswith(("&&", "||"), i) else 1
+            continue
+        i += 1
+    parts.append(command[start:].strip())
+    return [part for part in parts if part]
+
+
+def _format_command(command: str, width: int) -> str:
+    """Break a command too long for width into shell continuation lines.
+
+    Display only — the result is still valid shell, but seer runs the original.
+    """
+    if len(command) <= width or "\n" in command:
+        return command
+    parts = _split_at_operators(command)
+    return " \\\n  ".join(parts) if len(parts) > 1 else command
+
+
 def _command_panel(command: str):
-    return _get_padded_renderable(Panel(Syntax(command, "bash", theme="ansi_dark"), border_style="cyan"))
+    # The whole command must be visible before it is approved: break long ones
+    # at operators and wrap what is still too long — never crop.
+    term_width = console.width if console.width is not None else 80
+    inner_width = (min(82, term_width - 8) if term_width > 20 else term_width) - 4
+    text = Syntax("", "bash", theme="ansi_dark").highlight(_format_command(command, inner_width))
+    text.rstrip()
+    # Wrap, and fold words longer than a line — highlight() returns no_wrap text.
+    text.no_wrap = False
+    text.overflow = "fold"
+    return _get_padded_renderable(Panel(text, border_style="cyan"))
 
 
 def _confirm_command(command: str) -> Optional[str]:
