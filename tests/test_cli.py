@@ -6,7 +6,7 @@ import pytest
 from rich.console import Console
 from rich.text import Text
 
-from seer.cli import _TailRenderable, stream_response
+from seer.cli import _TailRenderable, _command_panel, _format_command, _split_at_operators, stream_response
 
 
 class _Config:
@@ -98,3 +98,42 @@ def test_help_and_version_show_seer_version():
     assert f"seer v{__version__}" in runner.invoke(main, ["--help"]).output
     for flag in ("--version", "-V"):
         assert runner.invoke(main, [flag]).output.strip() == f"seer, version {__version__}"
+
+
+class TestFormatCommand:
+    def test_short_command_unchanged(self):
+        assert _format_command("ls | head", 80) == "ls | head"
+
+    def test_long_command_breaks_before_operators(self):
+        cmd = "cd /repo && git log -20 --name-only | sort | uniq -c || true; echo done"
+        assert _format_command(cmd, 20) == (
+            "cd /repo \\\n  && git log -20 --name-only \\\n  | sort \\\n  | uniq -c"
+            " \\\n  || true \\\n  ; echo done"
+        )
+
+    def test_operators_in_quotes_and_substitutions_are_kept(self):
+        cmd = "grep -E 'a|b' x && echo \"c;d\" $(ls | wc -l) 2>&1 | head"
+        assert _split_at_operators(cmd) == [
+            "grep -E 'a|b' x", "&& echo \"c;d\" $(ls | wc -l) 2>&1", "| head",
+        ]
+
+    def test_redirect_pipe_and_multiline_left_alone(self):
+        assert _split_at_operators("ls >| out") == ["ls >| out"]
+        assert _format_command("cat <<EOF\n" + "x" * 90 + "\nEOF", 20).startswith("cat <<EOF\n")
+
+    def test_formatted_command_is_valid_shell(self):
+        import subprocess
+        cmd = "echo one && echo two | tr a-z A-Z; echo three"
+        formatted = _format_command(cmd, 10)
+        run = lambda c: subprocess.run(["bash", "-c", c], capture_output=True, text=True).stdout
+        assert "\\\n" in formatted
+        assert run(formatted) == run(cmd)
+
+    def test_panel_shows_whole_long_command(self):
+        cmd = "find . -name '*.py' -exec wc -l {} + | sort -rn | head -5 && echo " + "z" * 120
+        console = Console(width=60, record=True)
+        with patch("seer.cli.console", console):
+            console.print(_command_panel(cmd))
+        text = "".join(console.export_text().split())
+        assert "z" * 120 in text.replace("│", "")
+        assert "…" not in text

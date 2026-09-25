@@ -89,42 +89,21 @@ providers:
 
 ## v1.2.0 — Brave Mode & Pipe-Aware Output 🔜
 
-### Brave Mode
+### Brave Mode ✅
 
 An autonomous execution mode where seer plans the necessary commands, runs them, and returns an interpreted result — rather than suggesting a command for the user to run manually.
 
-**Example:** `seer find the largest file here` → seer runs `find` + `du` + `sort`, captures output, and responds with a human-readable answer.
+**Example:** `seer -b find the largest file here` → seer runs `find` + `stat` + `sort`, captures output, and responds with a human-readable answer.
 
-**Mode system**
+- `-b` / `--brave` forces it for one query, `--no-brave` disables it
+- `brave: true` in config makes it the default for free-form queries, including `Ctrl+G`
+- Plain-text protocol (```` ```run ```` blocks) — works with every provider, including local models and subscription CLIs
+- Read-only commands (allowlist, checked locally — not trusted to the LLM) run immediately; everything else asks `[Y/n/e]`
+- `brave_confirm: auto | trust | always` — trust asks only for known-destructive commands; the model's own `run-write` flag always asks
+- Non-interactive execution in the current directory, 60s timeout per command, max 6 steps
+- `--raw` / `-r` prints the final answer as plain text
 
-A new top-level `mode` config key controls the default behaviour:
-
-| Value | Behaviour |
-|---|---|
-| `default` | Current behaviour — suggest commands, never execute autonomously |
-| `brave` | Always use brave mode — plan, execute, interpret |
-| `auto` | seer infers the desired mode from the query (e.g. questions → brave, `do`-style tasks → default) |
-
-```yaml
-mode: auto   # default | brave | auto
-```
-
-**Per-invocation override**
-
-`--brave` / `-b` flag forces brave mode for a single query regardless of config:
-
-```
-seer --brave find the largest file here
-seer -b what is eating my disk space
-```
-
-**Execution model**
-- LLM receives the query and generates a plan (sequence of shell commands)
-- seer executes each command and feeds stdout/stderr back to the LLM
-- Before any write or destructive command, seer pauses and prompts for confirmation (`[Y/n/e]`)
-- Read-only commands run without interruption
-- LLM produces a final human-readable summary
-- `--raw` / `-r` outputs plain text (no Markdown formatting)
+**Later:** `mode: auto` — infer from the query whether to run commands or just answer.
 
 ---
 

@@ -349,3 +349,15 @@ class TestAutoCLI:
         codex = DEFAULT_CONFIG["providers"]["codex-cli"]
         assert codex["model"] == ["gpt-6-luna", "auto"]
         assert codex["reasoning_effort"] == "low"
+
+
+class TestBraveConfirm:
+    def test_defaults_to_auto(self):
+        from seer.config import _brave_confirm
+        assert _brave_confirm("auto") == "auto"
+        assert _brave_confirm("TRUST") == "trust"
+
+    def test_rejects_unknown_value(self):
+        from seer.config import _brave_confirm
+        with pytest.raises(ValueError, match="brave_confirm"):
+            _brave_confirm("yolo")

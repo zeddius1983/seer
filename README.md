@@ -1,281 +1,212 @@
-# SEER - Shell Enhanced Execution & Reasoning
+# SEER — Shell Enhanced Execution & Reasoning
 
 ![Built with AI assistance](https://img.shields.io/badge/Built%20with-AI%20assistance-blueviolet?logo=openai&logoColor=white)
 
-LLM-powered assistant for your terminal. Get contextual help from your local or cloud LLM based on what just happened in your shell — errors, failed commands, unexpected output.
+**An AI assistant that lives in your terminal.** It sees what just went wrong and tells you how to fix it. It answers shell questions. In brave mode, it does the job for you.
 
-Inspired by [PEEL](https://github.com/lemonade-sdk/peel) for PowerShell.
+![seer help explaining a failed tar command](docs/images/seer-help.svg)
 
-**Supported platforms:** macOS, Linux  
-**Supported shells:** zsh, bash
+## Why seer
 
+- **No copy-pasting errors.** `seer help` reads your recent terminal output and explains the last failure.
+- **It can do the work.** Brave mode runs the commands it needs, reads the results, and answers: tables, summaries, fixes.
+- **Safe by default.** Read-only commands run on their own. Anything that changes something asks first, and you see the whole command.
+- **Your choice of model.** Local (LM Studio, Ollama, llama.cpp, vLLM), OpenAI, Anthropic, or your Claude Code / Codex subscription. seer picks up a running local server automatically.
+- **Plain English at the prompt.** Type what you want and press `Ctrl+G`.
+
+macOS and Linux · zsh and bash · inspired by [PEEL](https://github.com/lemonade-sdk/peel) for PowerShell.
+
+---
+
+## Quick start
+
+**1. Install**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/zeddius1983/seer/main/install.sh | bash
+source ~/.zshrc
 ```
-$ git pull-request
-git: 'pull-request' is not a git command. See 'git --help'.
 
-$ seer help
-The command `git pull-request` is not valid. Use `git pull` to fetch and
-merge, or install the `gh` CLI and run `gh pr create` to open a pull request.
+This installs `seer` (and `uv` if needed), the zsh integration and `Ctrl+G`. On bash, add `source "$(seer --shell-path bash)"` to `~/.bashrc` instead.
+
+**2. Connect a model.** Start [LM Studio](https://lmstudio.ai) or [Ollama](https://ollama.com) with any model and seer finds it. For something else, see [Choosing a model](#choosing-a-model). Check with:
+
+```bash
+seer --stats
 ```
+
+**3. Use it**
+
+```bash
+seer help                          # after something fails: what went wrong, and the fix
+seer how do I find what is using port 8080
+seer -b what is taking up space in my home folder
+```
+
+---
+
+## Brave mode: let seer do it
+
+Add `-b` and seer works out the commands, runs them, and answers with the result. Each command is shown as it runs.
+
+![seer brave mode listing the largest Python files as a table](docs/images/brave-table.svg)
+
+It handles tasks that need several steps, where each step depends on what the last one found:
+
+```bash
+seer -b find the 5 largest files here and show them as a table
+seer -b which file changed most in the last 20 commits, and what were its last 3 changes about
+seer -b which of my python files has the most lines, and what does it import
+seer -b what is listening on network ports, and which process owns each
+seer -b find log files older than 30 days, tell me how much space they take, and compress them
+seer -b check whether config.yaml is valid, explain what is wrong, and fix it
+seer -b write a zfs cheatsheet and save it to ~/Documents as markdown
+```
+
+**Anything that changes something asks first.** You see the whole command in a box and answer `y`, `n`, or `e` to edit it. If you answer `n`, seer stops and tells you what it would have run.
+
+![seer brave mode reading and validating a broken YAML file, then asking before fixing it](docs/images/brave-fix.svg)
+
+To make brave mode the default for every question, including `Ctrl+G`, add this to `~/.config/seer/config.yaml`:
+
+```yaml
+brave: true
+brave_confirm: auto   # when to ask first: auto | trust | always
+```
+
+| `brave_confirm` | Asks before running |
+|---|---|
+| `auto` (default) | anything not known to be read-only |
+| `trust` | only destructive commands: `rm`, `mv`, `sudo`, `> file`, `sed -i`, `git push`/`reset`, installs, … |
+| `always` | every command |
+
+<details>
+<summary>How brave mode stays safe</summary>
+
+- seer checks each command itself before running it. It doesn't just take the model's word that a command is safe. In `auto` mode only an allowlist of read-only commands runs without asking. Commands like `find -exec`, `xargs`, `sed` and `awk` count as read-only only when what they run or edit is also read-only.
+- The model also marks commands it knows will change something, and those always ask. The model can add confirmations but never skip them, because text in a file or a web page could try to talk it into something harmful.
+- Commands run in your current directory with no input and a 60s timeout, for at most 6 steps. `Ctrl+C` stops at any point.
+- `seer --no-brave <question>` turns brave mode off for one question. `seer help`, `seer do` and piped input never use it.
+- Brave mode needs a capable model. It was tested with Claude Sonnet. Very small local models (~2B) tend to lose track after a few steps.
+
+</details>
+
+---
+
+## Everyday use
+
+| You type | seer does |
+|---|---|
+| `seer help` | Explains the last error in your terminal and how to fix it |
+| `seer <question>` | Answers any shell question |
+| `seer -b <task>` | Does the task and shows the result ([brave mode](#brave-mode-let-seer-do-it)) |
+| `seer do <task>` | Suggests one command and runs it if you confirm |
+| *question* + `Ctrl+G` | Same as `seer <question>`, straight from the prompt (zsh) |
+| `cmd 2>&1 \| seer` | Explains that command's output |
+| `tail -f app.log \| seer` | Watches a live stream and flags problems every 15s |
+
+**Useful flags:** `-s` streams the answer as it's written · `-r` gives plain text for scripts · `-p <provider>` / `-m <model>` switch the model for one question · `--no-context` skips your terminal output.
+
+**Diagnostics:** `seer --stats` shows the active model and settings, `seer --context` shows exactly what gets sent, and `seer config` prints your config file.
+
+---
+
+## Choosing a model
+
+With `provider: auto` (the default), seer uses the first local server it finds: llama.cpp, LM Studio, Ollama, then vLLM. To use something else, set it in `~/.config/seer/config.yaml` (run `seer config` to create it):
+
+```yaml
+provider: anthropic        # or: openai, ollama, lmstudio, claude-cli, …
+```
+
+| Provider | `provider:` | Setup |
+|---|---|---|
+| [LM Studio](https://lmstudio.ai), [Ollama](https://ollama.com), [llama.cpp](https://github.com/ggerganov/llama.cpp), [vLLM](https://github.com/vllm-project/vllm) | `lmstudio`, `ollama`, `llamacpp`, `vllm` | Just start the server |
+| [OpenAI](https://platform.openai.com) | `openai` | `OPENAI_API_KEY` |
+| [Anthropic](https://anthropic.com) | `anthropic` | `ANTHROPIC_API_KEY` |
+| [Claude Code](https://code.claude.com) / [Codex](https://developers.openai.com/codex) CLI | `claude-cli`, `codex-cli` | Installed and signed in. Uses your subscription |
+| Any OpenAI-compatible server | a name you add | `type: openai` + `base_url` |
+
+<details>
+<summary>Using your Claude Code or Codex subscription</summary>
+
+If you have Claude Code or Codex installed and signed in, seer can use it instead of an API key. This is **off by default**:
+
+```yaml
+provider: claude-cli     # use it always…
+auto_cli: true           # …or only when no local server is running (claude-cli, then codex-cli)
+
+providers:
+  claude-cli:
+    type: claude-cli
+    model: sonnet        # haiku / sonnet / opus, or a full model id
+  codex-cli:
+    type: codex-cli
+    model: [gpt-6-luna, auto]   # tried in order; auto = your ~/.codex/config.toml model
+    reasoning_effort: low
+```
+
+- seer runs the official `claude -p` / `codex exec` binary, which signs in with your own account. seer never touches your credentials.
+- The CLI runs with its tools switched off, so it only answers. When brave mode runs commands, seer runs them, never the CLI.
+- Requests count against your plan's limits. `claude-cli` answers in a few seconds; `codex-cli` takes about 10s.
+- This use is subject to [Anthropic's](https://code.claude.com/docs/en/legal-and-compliance) and [OpenAI's](https://openai.com/policies/terms-of-use/) terms. If you want no ambiguity, use the `anthropic` / `openai` providers with an API key.
+
+</details>
+
+<details>
+<summary>Custom server or model</summary>
+
+```yaml
+provider: myserver
+providers:
+  myserver:
+    type: openai                     # any OpenAI-compatible API
+    base_url: http://myserver:8080/v1
+    api_key: none
+    model: my-model                  # or auto: the first model the server lists
+```
+
+</details>
 
 ---
 
 ## How it works
 
-Shell hooks (`PROMPT_COMMAND` / `precmd`) save your terminal's scrollback after every command. When you run `seer help`, the saved context is sent to your LLM of choice. No copy-pasting, no switching windows.
-
-With tmux, the full screen output (including stderr) is captured. Without tmux, the last command and exit code are saved as fallback.
+A small shell hook saves your recent terminal output after every command. `seer help` sends that output, plus your OS and shell, to the model. Inside tmux seer reads the whole screen, including error output. Outside tmux it sees the last command and its exit code.
 
 ---
 
-## Installation
+<details>
+<summary>More install options, uninstall, development</summary>
 
-### Method 1: Installer (Recommended)
-
-Run directly from GitHub — installs `seer`, sets up shell integration and implicit mode:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/zeddius1983/seer/main/install.sh | bash
-```
-
-`uv` is installed automatically if not already present. To install a specific version or branch:
+**Specific version or branch** (any git ref):
 
 ```bash
-# By version tag
-curl -fsSL https://raw.githubusercontent.com/zeddius1983/seer/main/install.sh | bash -s -- --version v1.1.0
-
-# By branch
-curl -fsSL https://raw.githubusercontent.com/zeddius1983/seer/main/install.sh | bash -s -- --version feature/v1.1.0
+curl -fsSL https://raw.githubusercontent.com/zeddius1983/seer/main/install.sh | bash -s -- --version v1.2.0
 ```
 
-`--version` accepts any git ref (tag, branch, or SHA). It can be combined with other flags:
+**Different `Ctrl+G` key** (zsh `bindkey` notation, e.g. `^@` for Ctrl+Space):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/zeddius1983/seer/main/install.sh | bash -s -- --version v1.1.0 --all
+curl -fsSL https://raw.githubusercontent.com/zeddius1983/seer/main/install.sh | SEER_IMPLICIT_BIND='^@' bash
 ```
 
-> **Note:** Whenever `~/.zshrc` is modified, a backup is created first as `~/.zshrc.YYYYMMDD_HHMMSS.bak`.
+**From source:** `git clone https://github.com/zeddius1983/seer && cd seer && uv tool install .`
 
-### Method 2: Build from source
+**Uninstall:**
 
-```bash
-git clone https://github.com/zeddius1983/seer
-cd seer
-uv tool install .
-```
-
----
-
-## Uninstallation
-
-If you installed via the **installer** (Method 1):
 ```bash
 curl -fsSL https://raw.githubusercontent.com/zeddius1983/seer/main/install.sh | bash -s -- --uninstall
 ```
 
----
+The installer backs up `~/.zshrc` before changing it (`~/.zshrc.YYYYMMDD_HHMMSS.bak`).
 
-## Usage
-
-### Implicit Mode (Ctrl+G)
-
-Implicit mode is installed automatically with seer. Type any question directly into your terminal and press `Ctrl+G`:
+**Development:**
 
 ```bash
-find the largest file in this folder[Press Ctrl+G]
-# Instantly expands and runs: seer find the largest file in this folder
+uv sync                  # dev environment
+uv run pytest            # tests
+.venv/bin/seer --help    # run without installing
 ```
 
-To use a different key, set `SEER_IMPLICIT_BIND` (zsh `bindkey` notation) when installing:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/zeddius1983/seer/main/install.sh | SEER_IMPLICIT_BIND='^@' bash   # Ctrl+Space
-```
-
-> Before v1.1.0 the default was `Ctrl+Space`, which clashes with global hotkeys in some
-> apps (e.g. OpenClaw) and macOS input-source switching. Re-run the installer to switch.
-
-### Standard Commands
-
-```bash
-# Explain what just went wrong
-seer help
-
-# Ask anything shell-related
-seer how to list all datasets in a ZFS pool
-seer what does SIGKILL mean
-seer how do I find which process is using port 8080
-
-# Let seer do it — generates a command, shows it, asks before running
-seer do find the largest file in ~/Downloads
-seer do show disk usage by folder in /var
-seer do list all listening ports
-
-# Tip: quote the task if it contains apostrophes or special characters
-seer do "show all files modified in the last week"
-seer do "find the largest file and show it's size in MB"
-
-# Pipe output directly (no shell hook needed)
-kubectl get pods 2>&1 | seer
-journalctl -xe | seer why is nginx failing
-
-# Skip context, ask a clean question
-seer --no-context explain the difference between hard and soft links
-
-# Raw output — no glow or rich rendering
-seer --raw how do I list open ports
-seer -r help
-
-# Use a specific provider or model for one query
-seer -p anthropic help
-seer -p openai -m gpt-4o how do I list listening ports
-
-# Use your installed Claude Code / Codex CLI (your own subscription)
-seer -p claude-cli help
-seer -p claude-cli -m haiku help
-```
-
-### Subcommands
-
-| Command | Description |
-|---|---|
-| `seer help` | Analyse your last terminal output and explain errors |
-| `seer do <task>` | Generate a shell command, preview it, confirm before running |
-| `seer config` | Show the active config file, or create a default one |
-| `seer --context` | Show the full system prompt and captured terminal context |
-| `seer --stats` | Show provider, model, context size, and system info |
-
-### Flags
-
-| Flag | Short | Description |
-|---|---|---|
-| `--no-context` | | Skip attaching terminal context |
-| `--raw` | `-r` | Disable glow and rich rendering, stream plain text |
-| `--provider <name>` | `-p` | Override the active provider for this query |
-| `--model <name>` | `-m` | Override the model for this query |
-
----
-
-## Configuration
-
-Generate the default config file:
-```bash
-seer config
-```
-
-This creates `~/.config/seer/config.yaml`:
-
-```yaml
-provider: lmstudio        # active provider
-
-providers:
-  lmstudio:               # LM Studio (or any OpenAI-compatible local server)
-    type: openai
-    base_url: http://localhost:1234/v1
-    api_key: lmstudio
-    model: google/gemma-3-4b
-
-  ollama:
-    type: openai
-    base_url: http://localhost:11434/v1
-    api_key: ollama
-    model: llama3.2
-
-  openai:
-    type: openai
-    model: gpt-4o
-    api_key: sk-...       # or set OPENAI_API_KEY env var
-
-  anthropic:
-    type: anthropic
-    model: claude-sonnet-4-6
-    api_key: sk-ant-...   # or set ANTHROPIC_API_KEY env var
-
-  # Any OpenAI-compatible endpoint (vLLM, llama.cpp, etc.)
-  custom:
-    type: openai
-    base_url: http://myserver:8080/v1
-    api_key: none
-    model: my-model
-```
-
----
-
-## Supported providers
-
-| Provider | `type` | Notes |
-|---|---|---|
-| [LM Studio](https://lmstudio.ai) | `openai` | Default. Set `base_url: http://localhost:1234/v1` |
-| [Ollama](https://ollama.com) | `openai` | Set `base_url: http://localhost:11434/v1` |
-| [vLLM](https://github.com/vllm-project/vllm) | `openai` | Set `base_url: http://localhost:8000/v1` |
-| [llama.cpp](https://github.com/ggerganov/llama.cpp) | `openai` | Set `base_url: http://localhost:8080/v1` |
-| [OpenAI](https://platform.openai.com) | `openai` | Set `OPENAI_API_KEY` |
-| [Anthropic](https://anthropic.com) | `anthropic` | Set `ANTHROPIC_API_KEY` |
-| Any OpenAI-compatible endpoint | `openai` | Set `base_url` to your server |
-| [Claude Code](https://code.claude.com) CLI | `claude-cli` | Opt-in. Uses your installed `claude` and its login |
-| [Codex](https://developers.openai.com/codex) CLI | `codex-cli` | Opt-in. Uses your installed `codex` and its login |
-
-### Subscription CLIs (Claude Code, Codex)
-
-If you have Claude Code or Codex installed and signed in, seer can use them
-instead of an API key. This is **off by default** and only happens if you choose it:
-
-```yaml
-# Use one explicitly…
-provider: claude-cli
-
-# …or let `provider: auto` fall back to them when no local server is running.
-# Local servers are always tried first.
-auto_cli: true                        # tries claude-cli, then codex-cli
-# auto_cli: [codex-cli, claude-cli]   # or set your own order / subset
-
-providers:
-  claude-cli:
-    type: claude-cli
-    model: sonnet             # haiku / sonnet / opus alias or a full model id
-  codex-cli:
-    type: codex-cli
-    # Tried in order: if a model isn't available on your plan, seer falls back
-    # to the next one. auto = the model from ~/.codex/config.toml
-    model: [gpt-6-luna, auto]
-    reasoning_effort: low     # passed as -c model_reasoning_effort=...
-    # command: /path/to/codex # optional, if the binary isn't on PATH
-```
-
-How it works:
-
-- seer runs the official, unmodified `claude -p` / `codex exec` binary. The CLI signs in
-  with your own account; seer never reads, stores, or forwards your credentials.
-- Tools are disabled (`claude --tools ""`, `codex --sandbox read-only`) and sessions
-  aren't saved, so the CLI only answers. It never runs commands or edits files.
-- Your terminal context is sent to Anthropic / OpenAI, and the requests count against
-  your plan's usage limits. `seer --stats` shows `(your subscription)` when one of these
-  providers is active.
-- `claude-cli` streams tokens and starts in a few seconds. `codex-cli` returns the whole
-  answer at once and is slower (~10s), because Codex adds its own agent prompt.
-
-> Using your subscription this way is subject to
-> [Anthropic's](https://code.claude.com/docs/en/legal-and-compliance) and
-> [OpenAI's](https://openai.com/policies/terms-of-use/) terms. If you want no
-> ambiguity, use the `anthropic` / `openai` providers with an API key.
-
----
-
-## Development
-
-```bash
-git clone https://github.com/zeddius1983/seer
-cd seer
-
-# Install dev environment
-uv sync
-
-# Run directly without installing
-.venv/bin/seer --help
-
-# Build a wheel
-uv build
-# → dist/seer-1.0.0-py3-none-any.whl
-```
-
-
+</details>
