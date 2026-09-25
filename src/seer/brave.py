@@ -82,7 +82,6 @@ _GIT_READ_ONLY = {"status", "log", "diff", "show", "ls-files", "rev-parse", "bla
 
 # Command separators. Background jobs (&) and subshells are not auto-run.
 _SEPARATORS = {"|", "||", "&&", ";"}
-_SAFE_REDIRECT_TARGETS = {"/dev/null", "1", "2"}
 _OPERATOR_CHARS = "<>&|();"
 # A quoted or escaped operator ("|", \;) lexes the same as a real one, which
 # could hide arguments from the check — refuse rather than guess.
@@ -104,6 +103,14 @@ _DANGEROUS = {
     "poweroff", "launchctl", "systemctl", "service", "crontab", "tee", "install",
     "rsync", "sh", "bash", "zsh", "dash", "ksh", "fish", "eval", "source", ".",
 }
+# Commands whose safety depends on their arguments. Behind xargs or find -exec,
+# arguments arrive at run time (`printf -- -oout | xargs sort` runs
+# `sort -oout`), so these only run there unasked if safe with ANY arguments.
+_ARG_SENSITIVE = (
+    set(_WRITE_FLAGS)
+    | {"uniq", "date", "sysctl", "find", "git", "sed", "awk", "xargs", "perl", "ruby"}
+)
+
 # Prefixes that run the command after them: `nice rm …` is `rm …`.
 _WRAPPERS = {"env", "nice", "nohup", "time", "command", "builtin", "exec", "timeout", "stdbuf", "caffeinate", "watch"}
 _GIT_DANGEROUS = {
@@ -123,6 +130,7 @@ _TOOL_DANGEROUS = {
         {"rm", "rmi", "kill", "stop", "prune", "delete", "down", "apply", "run", "exec"},
     ),
 }
+_ARG_SENSITIVE |= set(_TOOL_DANGEROUS)
 
 
 @dataclass
@@ -187,10 +195,8 @@ def is_read_only(command: str) -> bool:
                 return False
             segment = []
         elif token and set(token) <= set(_OPERATOR_CHARS):
-            # Redirections: only 2>&1, >/dev/null and friends are harmless.
             if ">" in token:
-                target = tokens[i + 1] if i + 1 < len(tokens) else ""
-                if target not in _SAFE_REDIRECT_TARGETS:
+                if not _redirect_is_safe(token, tokens[i + 1] if i + 1 < len(tokens) else ""):
                     return False
                 i += 1
             elif token != "<":
@@ -231,8 +237,7 @@ def _segment_is_read_only(words: list[str]) -> bool:
             return False
     if name == "sysctl" and any("=" in a for a in args):
         return False   # `sysctl name=value` sets a value
-    forbidden = _WRITE_FLAGS.get(name, ())
-    return not any(a == f or a.startswith(f + "=") for a in args for f in forbidden)
+    return not _writes_via_operands(name, args) and not _has_flag(args, _WRITE_FLAGS.get(name, ()))
 
 
 def _strip_read_only_find_exec(args: list[str]) -> Optional[list[str]]:
@@ -250,7 +255,7 @@ def _strip_read_only_find_exec(args: list[str]) -> Optional[list[str]]:
             )
             if end is None:
                 return None
-            if not _segment_is_read_only(args[i + 1:end]) or end == i + 1:
+            if not _runs_read_only_with_any_args(args[i + 1:end]):
                 return None
             i = end + 1
             continue
@@ -294,8 +299,8 @@ def _sed_script_is_read_only(script: str) -> bool:
     return _SED_SAFE_REST.fullmatch(rest) is not None
 
 
-def _xargs_is_read_only(args: list[str]) -> bool:
-    """xargs is as safe as the command it runs (echo when none is given)."""
+def _xargs_target(args: list[str]) -> list[str]:
+    """The command xargs runs, after its own options (empty: it runs echo)."""
     i = 0
     while i < len(args) and args[i].startswith("-"):
         if args[i] == "--":
@@ -304,7 +309,73 @@ def _xargs_is_read_only(args: list[str]) -> bool:
         if args[i] in _XARGS_VALUE_OPTS:
             i += 1   # the option's value is the next word
         i += 1
-    return _segment_is_read_only(args[i:])
+    return args[i:]
+
+
+def _xargs_is_read_only(args: list[str]) -> bool:
+    target = _xargs_target(args)
+    return not target or _runs_read_only_with_any_args(target)
+
+
+def _runs_read_only_with_any_args(words: list[str]) -> bool:
+    """For commands run by xargs / find -exec, which add arguments at run time."""
+    return bool(words) and words[0] not in _ARG_SENSITIVE and _segment_is_read_only(words)
+
+
+def _has_flag(args: list[str], flags) -> bool:
+    """Whether args use any of flags, in every spelling getopt accepts:
+    `-o out`, `-oout`, `-rno out` (clustered), `--output=out`, `--out=out`
+    (unique prefix). Single-dash words like find's `-delete` match whole."""
+    for arg in args:
+        if arg == "--":
+            break
+        for flag in flags:
+            if flag.startswith("--"):
+                name = arg.split("=", 1)[0]
+                if len(name) > 2 and flag.startswith(name):
+                    return True
+            elif len(flag) == 2:
+                if arg.startswith("-") and not arg.startswith("--") and flag[1] in arg[1:]:
+                    return True
+            elif arg == flag or arg.startswith(flag + "="):
+                return True
+    return False
+
+
+def _operands(args: list[str], value_opts=()) -> list[str]:
+    """Non-option arguments, skipping the values of options in value_opts."""
+    operands: list[str] = []
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg == "--":
+            return operands + args[i + 1:]
+        if arg.startswith("-") and len(arg) > 1:
+            if arg in value_opts:
+                i += 1
+        else:
+            operands.append(arg)
+        i += 1
+    return operands
+
+
+def _writes_via_operands(name: str, args: list[str]) -> bool:
+    """Commands that write through a plain operand rather than a flag."""
+    if name == "uniq":   # uniq [input [output]]
+        return len(_operands(args, ("-f", "-s", "-w"))) >= 2
+    if name == "date":   # date [MMDDhhmm…] sets the clock, unless -j (BSD)
+        return not _has_flag(args, ("-j",)) and any(
+            not op.startswith("+") for op in _operands(args, ("-d", "-f", "-r", "-v", "-z"))
+        )
+    return False
+
+
+def _redirect_is_safe(operator: str, target: str) -> bool:
+    """Only /dev/null and descriptor duplication (2>&1, >&2) write nowhere.
+    After a plain > or >>, `1` is a file named 1."""
+    if target == "/dev/null":
+        return True
+    return operator == ">&" and target in ("1", "2", "-")
 
 
 def is_dangerous(command: str) -> bool:
@@ -329,9 +400,8 @@ def is_dangerous(command: str) -> bool:
                 return True
             segment = []
         elif token and set(token) <= set(_OPERATOR_CHARS):
-            if ">" in token:   # writing to a file (not /dev/null or a stream)
-                target = tokens[i + 1] if i + 1 < len(tokens) else ""
-                if target not in _SAFE_REDIRECT_TARGETS:
+            if ">" in token:
+                if not _redirect_is_safe(token, tokens[i + 1] if i + 1 < len(tokens) else ""):
                     return True
                 i += 1
         else:
@@ -393,10 +463,8 @@ def _segment_is_dangerous(words: list[str]) -> bool:
             args = args[1:]
         return _segment_is_dangerous(args)
     if name == "xargs":
-        i = 0
-        while i < len(args) and args[i].startswith("-"):
-            i += 2 if args[i] in _XARGS_VALUE_OPTS else 1
-        return _segment_is_dangerous(args[i:])
+        target = _xargs_target(args)
+        return bool(target) and (target[0] in _ARG_SENSITIVE or _segment_is_dangerous(target))
     if name in _DANGEROUS or name.startswith("mkfs"):
         return True
     if name == "git":
@@ -416,7 +484,8 @@ def _segment_is_dangerous(words: list[str]) -> bool:
                 return True
             if arg in ("-exec", "-execdir", "-ok", "-okdir"):
                 end = next((j for j in range(i + 1, len(args)) if args[j] in ("+", _FIND_EXEC_END)), len(args))
-                if _segment_is_dangerous(args[i + 1:end]):
+                inner = args[i + 1:end]
+                if inner and (inner[0] in _ARG_SENSITIVE or _segment_is_dangerous(inner)):
                     return True
         return False
     if name == "sed":
@@ -427,8 +496,7 @@ def _segment_is_dangerous(words: list[str]) -> bool:
         return any(re.match(r"^-[a-zA-Z]*i", a) for a in args)   # in-place edit
     if name == "sysctl" and any("=" in a for a in args):
         return True
-    forbidden = _WRITE_FLAGS.get(name, ())
-    return any(a == f or a.startswith(f + "=") for a in args for f in forbidden)
+    return _writes_via_operands(name, args) or _has_flag(args, _WRITE_FLAGS.get(name, ()))
 
 
 def run_command(command: str, timeout: float = COMMAND_TIMEOUT) -> CommandResult:

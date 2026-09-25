@@ -135,6 +135,65 @@ class TestIsReadOnly:
         assert not is_read_only(command)
 
 
+# Commands that write a file through forms a flag-by-flag check can miss.
+# Both checks must catch them: auto may not run them unasked, and trust must ask.
+_HIDDEN_WRITES = [
+    # attached, clustered and abbreviated option values
+    "sort -ooutput input",
+    "sort -rno output input",
+    "sort --out=output input",
+    "sort --outp output input",
+    "tree -aooutput",
+    "date -us 12:00",
+    # an output file as a plain operand
+    "uniq input output",
+    "uniq -c -f 1 input output",
+    "uniq -- input output",
+    "date 010112002026",
+    # arguments supplied at run time by xargs / find -exec
+    "printf '%s\\n' -o output input | xargs sort",
+    "echo -ooutput | xargs -0 sort",
+    "ls | xargs uniq",
+    "ls | xargs sed -n p",
+    "find . -name '*.txt' -exec sort {} +",
+    "find . -execdir uniq {} \\;",
+    # a bare 1 or 2 after > or >> is a filename, not a stream
+    "echo changed > 1",
+    "echo changed >> 2",
+    "echo changed &> 1",
+    "ls >& out",
+]
+
+
+class TestHiddenWrites:
+    @pytest.mark.parametrize("command", _HIDDEN_WRITES)
+    def test_not_read_only(self, command):
+        assert not is_read_only(command)
+
+    @pytest.mark.parametrize("command", _HIDDEN_WRITES)
+    def test_dangerous(self, command):
+        assert is_dangerous(command)
+
+    @pytest.mark.parametrize("command", [
+        "ls 2>&1 | sort -rn",
+        "ls 1>&2",
+        "grep x file >/dev/null 2>&1",
+        "sort -rn -k2 file",
+        "sort -t: -k3 /etc/passwd",
+        "uniq -c file",
+        "sort file | uniq -c",
+        "date +%s",
+        "date -u '+%Y-%m-%d'",
+        "date -j -f '%s' 1700000000 '+%F'",
+        "find . -name '*.py' -print0 | xargs -0 wc -l",
+        "find . -type f -exec stat -f '%z %N' {} +",
+        "tree -L 2 -I node_modules",
+    ])
+    def test_everyday_forms_still_run_unasked(self, command):
+        assert is_read_only(command)
+        assert not is_dangerous(command)
+
+
 class TestIsDangerous:
     @pytest.mark.parametrize("command", [
         "rm -rf build",
