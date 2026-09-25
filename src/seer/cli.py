@@ -484,8 +484,19 @@ def _cmd_brave(task: str, cfg, raw: bool) -> None:
                 live.update(Text(f"  thinking… ({len(buffer.split())} words)", style="dim"))
         return buffer
 
+    approved: list[str] = []
+
+    def confirm(command: str) -> Optional[str]:
+        result = _confirm_command(command)
+        if result is not None:
+            approved.append(result)
+        return result
+
     def on_command(command: str) -> None:
-        err_console.print(Text(f"  $ {command}", style="dim"), highlight=False)
+        if approved and approved[-1] == command:
+            return   # just shown in full in the confirmation box
+        shown = command.replace("\n", "\n    ")
+        err_console.print(Text(f"  $ {shown}", style="dim"), highlight=False)
 
     def on_result(result: CommandResult) -> None:
         if result.exit_code is None:
@@ -496,7 +507,7 @@ def _cmd_brave(task: str, cfg, raw: bool) -> None:
     err_console.print()
     try:
         answer = run_brave(
-            task, complete, _confirm_command, on_command, on_result,
+            task, complete, confirm, on_command, on_result,
             confirm_policy=cfg.brave_confirm,
         )
     except (KeyboardInterrupt, click.Abort):   # Ctrl+C / Ctrl+D, incl. at the [Y/n/e] prompt
@@ -509,6 +520,7 @@ def _cmd_brave(task: str, cfg, raw: bool) -> None:
     elif raw:
         print(answer)
     else:
+        console.print()   # separate the answer from the commands above it
         console.print(_get_padded_renderable(Markdown(answer)))
 
 
