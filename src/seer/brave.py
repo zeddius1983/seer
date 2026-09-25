@@ -32,7 +32,11 @@ MAX_OUTPUT_CHARS = 4000
 
 CONFIRM_POLICIES = ("auto", "trust", "always")
 
-_RUN_BLOCK = re.compile(r"```run(-write)?[ \t]*\n(.*?)```", re.DOTALL)
+# The block runs to the LAST closing fence of the same length: a command that
+# writes Markdown contains ``` fences of its own. Replies with a command contain
+# nothing but the block, so nothing legitimate follows it. Longer fences
+# (````run … ````) are accepted too — the standard way to wrap text with ```.
+_RUN_BLOCK = re.compile(r"^(`{3,})run(-write)?[ \t]*\n(.*)\n\1[ \t]*$", re.DOTALL | re.MULTILINE)
 
 # Commands that only read state, whatever their arguments — unless a flag in
 # _WRITE_FLAGS says otherwise. Commands that can run other commands or scripts
@@ -132,9 +136,9 @@ class CommandResult:
 def extract_command(reply: str) -> Optional[tuple[str, bool]]:
     """Return (command, flagged_write) from the first ```run / ```run-write block, or None."""
     match = _RUN_BLOCK.search(reply)
-    if not match or not match.group(2).strip():
+    if not match or not match.group(3).strip():
         return None
-    return match.group(2).strip(), bool(match.group(1))
+    return match.group(3).strip(), bool(match.group(2))
 
 
 def needs_confirmation(command: str, flagged_write: bool, policy: str = "auto") -> bool:
@@ -558,7 +562,7 @@ def run_brave(
         command, flagged_write = proposed
         if notice is _DECLINED:
             # Asked for a command anyway — show it for the user to run, never run it.
-            return _RUN_BLOCK.sub(lambda m: f"```bash\n{m.group(2)}```", reply)
+            return _RUN_BLOCK.sub(lambda m: f"{m.group(1)}bash\n{m.group(3)}\n{m.group(1)}", reply)
         if notice is not None:
             # Looping or out of steps, and still no answer — say so plainly.
             return _gave_up(steps)

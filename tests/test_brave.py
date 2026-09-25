@@ -22,6 +22,15 @@ class TestExtractCommand:
     def test_extracts_run_write_block(self):
         assert extract_command("```run-write\ngzip a.log\n```") == ("gzip a.log", True)
 
+    def test_command_containing_code_fences_is_not_cut_short(self):
+        # A heredoc writing Markdown has ``` fences of its own.
+        command = "cat > notes.md << 'EOF'\n# Notes\n```bash\nzpool status\n```\nEOF"
+        assert extract_command(f"```run-write\n{command}\n```") == (command, True)
+
+    def test_four_backtick_fence(self):
+        command = "cat > a.md << 'EOF'\n```\nx\n```\nEOF"
+        assert extract_command(f"````run-write\n{command}\n````\n") == (command, True)
+
     def test_ignores_bash_blocks_in_final_answer(self):
         assert extract_command("Use this:\n```bash\nrm -rf x\n```") is None
 

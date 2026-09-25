@@ -165,6 +165,7 @@ Tag it `run-write` if it creates, changes or deletes anything — files, process
 ```run-write
 gzip old.log
 ```
+If the command itself contains ``` (e.g. it writes a Markdown file), fence the block with four backticks instead: ````run-write … ````.
 You then receive its output and exit code, and may run another command or answer.
 
 When you have enough information, reply with the final answer and no `run` block:
