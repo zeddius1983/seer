@@ -30,6 +30,15 @@ DEFAULT_CONFIG = {
     "provider": "auto",
     "context_lines": 100,
     "stream": False,
+    # Brave mode: seer runs the commands needed to answer free-form queries
+    # (incl. Ctrl+G) itself. Anything not known to be read-only asks first.
+    "brave": False,
+    # When brave mode asks before running a command:
+    #   auto   — unless it's known read-only (default)
+    #   trust  — only for known-destructive commands (rm, sudo, > file, git push, …)
+    #   always — every command
+    # A command the model itself flags as changing something always asks.
+    "brave_confirm": "auto",
     # Opt-in: let `provider: auto` fall back to your own Claude Code / Codex CLI
     # subscription when no local server is running. false | true | [ordered list]
     "auto_cli": False,
@@ -121,6 +130,15 @@ When given terminal context (error analysis mode):
 When asked a question (no context):
 - Answer directly and concisely using the formatting rules above."""
 
+_OS_RULES = """- CRITICAL: Tailor every command to the user's OS shown in the system info below.
+  If OS is macOS:
+    * FORBIDDEN: `find -printf` → use `find -exec stat -f '%z %N' {} +` instead
+    * FORBIDDEN: `ps aux --sort` → use `ps aux | sort -k4 -rn` instead
+    * FORBIDDEN: `stat --format` → use `stat -f` instead
+    * FORBIDDEN: `sed -i 's/x/y/'` → use `sed -i '' 's/x/y/'` instead
+    * Use `brew` for package installation, not `apt` or `dnf`
+  If OS is Linux: GNU tools are available, use them freely."""
+
 DO_SYSTEM_PROMPT = """You are seer, a shell command assistant. The user wants you to perform a task on their system.
 
 Your response must follow this exact structure:
@@ -132,14 +150,37 @@ Rules:
 - Use a single command, pipe chain, or steps joined with && — keep it one block.
 - Prefer safe, non-destructive commands. Avoid `sudo` unless the task requires it.
 - Do not add warnings or disclaimers — the user will review the command before it runs.
-- CRITICAL: Tailor every command to the user's OS shown in the system info below.
-  If OS is macOS:
-    * FORBIDDEN: `find -printf` → use `find -exec stat -f '%z %N' {} +` instead
-    * FORBIDDEN: `ps aux --sort` → use `ps aux | sort -k4 -rn` instead
-    * FORBIDDEN: `stat --format` → use `stat -f` instead
-    * FORBIDDEN: `sed -i 's/x/y/'` → use `sed -i '' 's/x/y/'` instead
-    * Use `brew` for package installation, not `apt` or `dnf`
-  If OS is Linux: GNU tools are available, use them freely."""
+""" + _OS_RULES
+
+BRAVE_SYSTEM_PROMPT = """You are seer in brave mode: you complete the user's task by running shell commands on their machine yourself, then answer with the result.
+
+## Protocol
+Each reply is EITHER one command to run OR the final answer — never both.
+
+To run a command, reply with exactly one fenced block and nothing else. Tag it `run` if the command only reads:
+```run
+du -ah . | sort -rh | head -5
+```
+Tag it `run-write` if it creates, changes or deletes anything — files, processes, settings, packages or git state. Tag by effect, not by tool: a `python3 -c` script that only reads and prints is `run`.
+```run-write
+gzip old.log
+```
+If the command itself contains ``` (e.g. it writes a Markdown file), fence the block with four backticks instead: ````run-write … ````.
+You then receive its output and exit code, and may run another command or answer.
+
+When you have enough information, reply with the final answer and no `run` block:
+- Markdown, as short as the result allows. Use a table only for several items with attributes (files with sizes, processes with memory).
+- Base it only on the command output you received — never invent results.
+- If the task changed something, confirm in one sentence what was done (e.g. "Created `notes.txt` containing `hello`.").
+- Lead with the result. No title or heading (no "Final Answer"), and don't describe the commands you ran unless it matters.
+
+## Rules
+- Commands run non-interactively: no stdin, no TTY, ~60s timeout. Never use pagers, editors, `sudo`, `top`, `watch` or `tail -f`.
+- Commands run in the user's working directory (shown below); "here" means that directory.
+- Prefer read-only commands. Combine steps with pipes or && — most tasks need 1–2 commands.
+- Keep output small (e.g. `head`) — long output is truncated.
+- `run-write` commands are shown to the user for approval first — never tag a command `run` to avoid that. If the user declines, stop and answer without running anything else.
+""" + _OS_RULES
 
 
 @dataclass
@@ -162,6 +203,8 @@ class Config:
     context_lines: int = 100
     system_prompt: str = SYSTEM_PROMPT
     stream: bool = False
+    brave: bool = False
+    brave_confirm: str = "auto"       # auto | trust | always — see brave.CONFIRM_POLICIES
     auto_cli: object = False          # False | True | list of CLI provider names
 
     def _auto_cli_order(self) -> list[str]:
@@ -264,8 +307,17 @@ def load_config() -> Config:
         context_lines=merged.get("context_lines", 100),
         system_prompt=merged.get("system_prompt", SYSTEM_PROMPT),
         stream=bool(merged.get("stream", False)),
+        brave=bool(merged.get("brave", False)),
+        brave_confirm=_brave_confirm(merged.get("brave_confirm", "auto")),
         auto_cli=merged.get("auto_cli", False),
     )
+
+
+def _brave_confirm(value) -> str:
+    value = str(value).lower()
+    if value not in ("auto", "trust", "always"):
+        raise ValueError(f"brave_confirm must be auto, trust or always (got '{value}').")
+    return value
 
 
 def save_default_config():
