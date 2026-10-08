@@ -86,7 +86,8 @@ brave_confirm: auto   # when to ask first: auto | trust | always
 - seer checks each command itself before running it. It doesn't just take the model's word that a command is safe. In `auto` mode only an allowlist of read-only commands runs without asking. Commands like `find -exec`, `xargs`, `sed` and `awk` count as read-only only when what they run or edit is also read-only.
 - The model also marks commands it knows will change something, and those always ask. The model can add confirmations but never skip them, because text in a file or a web page could try to talk it into something harmful.
 - Commands run in your current directory with no input and a 60s timeout, for at most 6 steps. `Ctrl+C` stops at any point.
-- `seer --no-brave <question>` turns brave mode off for one question. `seer help`, `seer do` and live streams (`tail -f … | seer`) never use it.
+- `seer --no-brave <question>` turns brave mode off for one question. `seer help` and `seer do` never use it.
+- Piped input (`git log -5 | seer -b …`) is read to the end before brave mode starts, however long the command takes. For a live stream (`tail -f … | seer`), use watch mode: no `-b`.
 - Brave mode needs a capable model. It was tested with Claude Sonnet. Very small local models (~2B) tend to lose track after a few steps.
 
 </details>
