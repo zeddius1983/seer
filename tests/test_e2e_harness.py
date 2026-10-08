@@ -216,3 +216,14 @@ def test_pty_callbacks_see_output_and_tick(tmp_path):
                     on_data=seen.extend, on_tick=lambda: ticks.append(1))
     assert b"hello" in seen and b"bye" in seen
     assert ticks   # called while waiting, not just when output arrives
+
+
+def test_dim_only_on_a_terminal(monkeypatch):
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.setattr(run.sys.stdout, "isatty", lambda: True)
+    assert run._dim("$ ls") == "\x1b[2m$ ls\x1b[0m"
+    monkeypatch.setenv("NO_COLOR", "1")
+    assert run._dim("$ ls") == "$ ls"
+    monkeypatch.delenv("NO_COLOR")
+    monkeypatch.setattr(run.sys.stdout, "isatty", lambda: False)
+    assert run._dim("$ ls") == "$ ls"

@@ -129,7 +129,8 @@ def run_scenario(sc: dict, seer: str, provider: str, model: str, verbose: int = 
             for event in tail.poll():
                 line = describe(event)
                 if line:
-                    print(f"    {line}", flush=True)
+                    # commands seer ran: dim, as seer itself shows them
+                    print(f"    {_dim(line) if event.get('event') == 'command' else line}", flush=True)
 
         started = time.monotonic()
         raw, exit_code, timed_out, answered = _run_in_pty(
@@ -253,6 +254,13 @@ def _run_in_pty(command: str, cwd: Path, env: dict, answers: list, timeout: floa
     _, status = os.waitpid(pid, 0)
     os.close(fd)
     return bytes(output), os.waitstatus_to_exitcode(status), timed_out, answered
+
+
+def _dim(text: str) -> str:
+    """Grey text on a terminal; plain when piped, saved or NO_COLOR is set."""
+    if os.environ.get("NO_COLOR") or not sys.stdout.isatty():
+        return text
+    return f"\x1b[2m{text}\x1b[0m"
 
 
 def _mirror(data: bytes) -> None:
