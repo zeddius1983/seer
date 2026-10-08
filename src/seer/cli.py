@@ -422,9 +422,7 @@ def main(ctx, query, no_context, raw, brave, stream, provider, model, stats, sho
     # Apply CLI overrides
     if provider:
         cfg.provider = provider
-    if model:
-        if cfg.provider in cfg.providers:
-            cfg.providers[cfg.provider]["model"] = model
+    cfg.model_override = model
 
     # Special sub-command: do
     if args and args[0] == "do":
@@ -667,8 +665,7 @@ def _cmd_context(provider_override, model_override):
         sys.exit(1)
     if provider_override:
         cfg.provider = provider_override
-    if model_override and cfg.provider in cfg.providers:
-        cfg.providers[cfg.provider]["model"] = model_override
+    cfg.model_override = model_override
 
     system = cfg.system_prompt + "\n\n" + format_for_prompt()
     context = get_context(cfg.context_lines)
@@ -698,8 +695,7 @@ def _cmd_stats(provider_override, model_override):
         sys.exit(1)
     if provider_override:
         cfg.provider = provider_override
-    if model_override and cfg.provider in cfg.providers:
-        cfg.providers[cfg.provider]["model"] = model_override
+    cfg.model_override = model_override
 
     try:
         pcfg = cfg.get_active_provider()

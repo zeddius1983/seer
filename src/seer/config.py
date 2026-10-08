@@ -215,6 +215,7 @@ class Config:
     brave: bool = False
     brave_confirm: str = "auto"       # auto | trust | always — see brave.CONFIRM_POLICIES
     auto_cli: object = False          # False | True | list of CLI provider names
+    model_override: Optional[str] = None   # -m: applies to whichever provider is active, `auto` included
 
     def _auto_cli_order(self) -> list[str]:
         if self.auto_cli is True:
@@ -246,6 +247,8 @@ class Config:
             )
 
         raw = self.providers[provider_name]
+        if self.model_override:
+            raw = {**raw, "model": self.model_override}
         ptype = raw.get("type", "openai")
         model = raw.get("model", "")
         fallback_models: list[str] = []

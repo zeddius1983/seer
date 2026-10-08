@@ -123,6 +123,15 @@ class TestAutoProvider:
 
         assert pcfg.name == "lmstudio"
 
+    def test_model_override_applies_to_the_auto_selected_provider(self):
+        # `seer -m <model>` with provider: auto used to be silently ignored.
+        cfg = _make_config("auto", {"lmstudio": LMSTUDIO})
+        cfg.model_override = "qwen3"
+        with patch("seer.config._list_openai_models", return_value=["gemma-3"]):
+            pcfg = cfg.get_active_provider()
+        assert (pcfg.name, pcfg.model, pcfg.model_was_auto) == ("lmstudio", "qwen3", False)
+        assert cfg.providers["lmstudio"]["model"] == "auto"   # config itself untouched
+
     def test_skips_providers_without_base_url(self):
         cfg = _make_config("auto", {
             "openai": OPENAI_CLOUD,     # no base_url
