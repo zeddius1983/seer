@@ -53,7 +53,9 @@ _backup_zshrc() {
   _ZSHRC_BACKED_UP=1
 }
 
-_zshrc_has() { grep -qF "seer-toolbox: $1" "$ZSHRC" 2>/dev/null; }
+# Match the whole marker line: "seer-toolbox: seer" alone is also the start of
+# "seer-toolbox: seer-implicit", and a re-install then dropped the integration.
+_zshrc_has() { grep -qxF "# -- seer-toolbox: $1 --" "$ZSHRC" 2>/dev/null; }
 
 _zshrc_add() {
   local key="$1"; shift
