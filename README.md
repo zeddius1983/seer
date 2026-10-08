@@ -183,7 +183,7 @@ A small shell hook saves your recent terminal output after every command. `seer 
 **Specific version or branch** (any git ref):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/zeddius1983/seer/main/install.sh | bash -s -- --version v1.2.0
+curl -fsSL https://raw.githubusercontent.com/zeddius1983/seer/main/install.sh | bash -s -- --version v1.3.0
 ```
 
 **Different `Ctrl+G` key** (zsh `bindkey` notation, e.g. `^@` for Ctrl+Space):
