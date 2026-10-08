@@ -84,6 +84,7 @@ def test_model_label_prefers_the_resolved_model():
     ("openai", "gpt-4o", "GPT-4o"),
     ("openai", "gpt-oss:20b", "gpt-oss:20b"),
     ("openai", "google/gemma-3-12b", "gemma-3-12b"),
+    ("openai", "/models/unsloth/gemma-4-26B-A4B-it-qat-UD-Q4_K_XL.gguf", "gemma-4-26B-A4B-it-qat-UD-Q4_K_XL"),
     ("claude-cli", "sonnet", "Sonnet"),
     ("claude-cli", "auto", "Claude Code"),
     ("codex-cli", "gpt-6-luna", "GPT-6 Luna"),
