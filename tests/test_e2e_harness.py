@@ -181,3 +181,38 @@ def test_pty_keeps_up_with_heavy_output(tmp_path):
     raw, _, timed_out, answered = run._run_in_pty(script, tmp_path, {"PATH": "/usr/bin:/bin"}, ["y"], 20)
     assert not timed_out and answered == ["y"]
     assert "got:y" in run.screen_text(raw)
+
+
+def test_trace_tail_returns_only_new_complete_events(tmp_path):
+    path = tmp_path / "trace.jsonl"
+    tail = run.TraceTail(path)
+    assert tail.poll() == []                       # seer hasn't written yet
+    path.write_text('{"event": "mode", "mode": "brave"}\n{"event": "llm", "sec')
+    assert [e["event"] for e in tail.poll()] == ["mode"]   # the half-written line waits
+    with open(path, "a") as f:
+        f.write('onds": 2.5, "reply": "ok"}\n')
+    (event,) = tail.poll()
+    assert event == {"event": "llm", "seconds": 2.5, "reply": "ok"}
+    assert tail.poll() == []
+
+
+@pytest.mark.parametrize("event, line", [
+    ({"event": "mode", "mode": "brave", "piped_chars": 1200}, "mode: brave (1,200 chars of input)"),
+    ({"event": "provider", "name": "vllm", "model": "/models/x/gemma.gguf"}, "provider: vllm · gemma.gguf"),
+    ({"event": "llm", "seconds": 3.6, "reasoning_words": 1500, "reply": "```run\nls\n```"},
+     "model: 3.6s, 1,500 words of reasoning → ```run ls ```"),
+    ({"event": "command", "command": "ls -R", "exit_code": None, "output_chars": 0}, "$ ls -R  → timed out, 0 chars"),
+    ({"event": "confirm", "command": "rm x", "decision": "declined"}, "[Y/n/e] rm x  → declined"),
+    ({"event": "answer", "text": "x" * 200}, "answer: " + "x" * 109 + "…"),
+    ({"event": "start"}, None),
+])
+def test_describe(event, line):
+    assert run.describe(event) == line
+
+
+def test_pty_callbacks_see_output_and_tick(tmp_path):
+    seen, ticks = bytearray(), []
+    run._run_in_pty("echo hello; sleep 0.7; echo bye", tmp_path, {"PATH": "/usr/bin:/bin"}, [], 10,
+                    on_data=seen.extend, on_tick=lambda: ticks.append(1))
+    assert b"hello" in seen and b"bye" in seen
+    assert ticks   # called while waiting, not just when output arrives
