@@ -26,9 +26,11 @@ import subprocess
 from dataclasses import dataclass
 from typing import Callable, Optional
 
+from .config import MAX_OUTPUT_CHARS
+
 MAX_STEPS = 6
 COMMAND_TIMEOUT = 60.0
-MAX_OUTPUT_CHARS = 4000
+MAX_PIPED_CHARS = 20000   # input piped to seer — resent with every step
 
 CONFIRM_POLICIES = ("auto", "trust", "always")
 
@@ -43,7 +45,7 @@ _RUN_BLOCK = re.compile(r"^(`{3,})run(-write)?[ \t]*\n(.*)\n\1[ \t]*$", re.DOTAL
 # (find -exec, xargs, awk, sed, git) get their own checks below. The rest (env,
 # perl, …) and anything that sets state (hostname, ifconfig) is excluded.
 _READ_ONLY = {
-    "basename", "cat", "cmp", "column", "cut", "date", "df", "diff", "dirname",
+    "basename", "cat", "cd", "cmp", "column", "cut", "date", "df", "diff", "dirname",
     "du", "echo", "egrep", "fgrep", "file", "find", "free", "grep", "head",
     "id", "jq", "ls", "lsof", "md5", "md5sum", "nl", "numfmt", "printf", "ps",
     "pwd", "readlink", "realpath", "rg", "sha1sum", "sha256sum", "shasum",
@@ -79,6 +81,9 @@ _SED_SAFE_REST = re.compile(r"[\d$,!;{}\s~+pdDqQ=nNhHgGxlz]*")
 _SED_SAFE_FLAGS = set("nErsuz")
 
 _GIT_READ_ONLY = {"status", "log", "diff", "show", "ls-files", "rev-parse", "blame", "shortlog", "describe"}
+
+# `for NAME in WORDS; do …; done` — the loop variable, and its uses in the body.
+_LOOP_VARIABLE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
 # Command separators. Background jobs (&) and subshells are not auto-run.
 _SEPARATORS = {"|", "||", "&&", ";"}
@@ -158,16 +163,20 @@ def needs_confirmation(command: str, flagged_write: bool, policy: str = "auto") 
     return not is_read_only(command)
 
 
-def _tokenize(command: str) -> Optional[list[str]]:
+def _tokenize(command: str, mark_expansions: bool = False) -> Optional[list[str]]:
     """Split command into words and operators the way the shell would, or None.
 
     None when quoting is unbalanced, or an operator is quoted or escaped
     ("|", \\;) — it lexes like a real one and could hide arguments from a check.
+    With mark_expansions, globs and variables the shell will expand carry
+    _EXPANDS (see _mark_expansions).
     """
     command = _QUOTED_SEMICOLON.sub(_FIND_EXEC_END, command)
     command = _SAFE_GLOB_QUALIFIER.sub(r"\1", command)
     if _AMBIGUOUS_OPERATOR.search(command):
         return None
+    if mark_expansions:
+        command = _mark_expansions(command)
     normalized = command.replace("\\\n", " ").replace("\n", " ; ")
     try:
         lexer = shlex.shlex(normalized, posix=True, punctuation_chars=True)
@@ -178,22 +187,56 @@ def _tokenize(command: str) -> Optional[list[str]]:
         return None
 
 
+# Marks a glob or variable the shell expands at run time: the checker can't
+# see the arguments it becomes. A private-use character, so never in a real
+# command; it stays inside its word through tokenizing.
+_EXPANDS = "\ue000"
+
+
+def _mark_expansions(command: str) -> str:
+    """Put _EXPANDS before each unquoted glob character (* ? [) and each $
+    outside single quotes. `find -name '*.py'` and `awk '{print $2}'` are
+    literal; `sort *.py` and `sort $X` are not — a file named --output=x, or
+    X=--output=x, makes sort write."""
+    out: list[str] = []
+    quote = ""
+    i = 0
+    while i < len(command):
+        c = command[i]
+        if quote == "'":
+            quote = "" if c == "'" else quote
+        elif c == "\\" and i + 1 < len(command):
+            out.append(command[i:i + 2])
+            i += 2
+            continue
+        elif quote == '"':
+            if c == '"':
+                quote = ""
+            elif c == "$":
+                c = _EXPANDS + c
+        elif c in "'\"":
+            quote = c
+        elif c == "$" or c in "*?[":
+            c = _EXPANDS + c
+        out.append(c)
+        i += 1
+    return "".join(out)
+
+
 def is_read_only(command: str) -> bool:
     """True only if every part of the command is known not to change anything."""
     if "`" in command or "$(" in command or "<(" in command or ">(" in command:
         return False
-    tokens = _tokenize(command)
+    tokens = _tokenize(command, mark_expansions=True)
     if tokens is None:
         return False
 
-    segment: list[str] = []
+    segments: list[list[str]] = [[]]
     i = 0
     while i < len(tokens):
         token = tokens[i]
         if token in _SEPARATORS:
-            if not _segment_is_read_only(segment):
-                return False
-            segment = []
+            segments.append([])
         elif token and set(token) <= set(_OPERATOR_CHARS):
             if ">" in token:
                 if not _redirect_is_safe(token, tokens[i + 1] if i + 1 < len(tokens) else ""):
@@ -202,15 +245,77 @@ def is_read_only(command: str) -> bool:
             elif token != "<":
                 return False   # &, (, ), <<, etc.
         else:
-            segment.append(token)
+            segments[-1].append(token)
         i += 1
-    return _segment_is_read_only(segment)
+    return _segments_are_read_only(segments)
+
+
+def _segments_are_read_only(segments: list[list[str]]) -> bool:
+    """Check simple commands in order, expanding `for … do … done` loops."""
+    i = 0
+    while i < len(segments):
+        segment = segments[i]
+        if segment[:1] == ["for"]:
+            end = _loop_end(segments, i)
+            if end is None or not _loop_is_read_only(segment, segments[i + 1:end]):
+                return False
+            i = end + 1
+        elif segment[:1] in (["do"], ["done"]):
+            return False   # outside a loop we understand
+        elif not _segment_is_read_only(segment):
+            return False
+        else:
+            i += 1
+    return True
+
+
+def _loop_end(segments: list[list[str]], start: int) -> Optional[int]:
+    """Index of the `done` that closes the loop opened at segments[start]."""
+    depth = 0
+    for j in range(start, len(segments)):
+        words = segments[j][1:] if segments[j][:1] == ["do"] else segments[j]
+        if words[:1] == ["for"]:   # also `do for …`, a loop nested in a body
+            depth += 1
+        elif segments[j] == ["done"]:
+            depth -= 1
+            if depth == 0:
+                return j
+    return None
+
+
+def _loop_is_read_only(header: list[str], rest: list[list[str]]) -> bool:
+    """`for NAME in WORDS` + [`do` …, …] up to its `done`.
+
+    The body must be read-only with each WORD in place of $NAME — `for c in
+    --output=x; do git show $c; done` writes a file. A WORD that's a glob or
+    variable keeps its _EXPANDS mark, so commands whose arguments matter
+    refuse it as they would `sort *.py`.
+    """
+    if len(header) < 3 or header[2] != "in" or not _LOOP_VARIABLE.fullmatch(header[1]):
+        return False   # `for c; do` loops over "$@", `for ((…))` is arithmetic
+    if not rest or rest[0][:1] != ["do"]:
+        return False
+    name, words = header[1], header[3:]
+    if any(not word or any(c.isspace() for c in word) for word in words):
+        return False   # an unquoted $NAME would split or vanish
+    body = [rest[0][1:]] + rest[1:]
+    # $NAME as marked by _mark_expansions; a quoted '$NAME' isn't, and stays literal.
+    use = re.compile(r"%s\$(?:\{%s\}|%s(?![A-Za-z0-9_]))" % (_EXPANDS, name, name))
+    for value in words:
+        expanded = [[use.sub(lambda m: value, word) for word in segment] for segment in body]
+        if not _segments_are_read_only(expanded):
+            return False
+    return True
 
 
 def _segment_is_read_only(words: list[str]) -> bool:
     if not words:
         return True
+    expands = any(_EXPANDS in word for word in words[1:])
+    words = [word.replace(_EXPANDS, "") for word in words]
     name, args = words[0], words[1:]
+    if expands and name in _ARG_SENSITIVE:
+        return False   # its run-time arguments could be anything, -o file included
     # VAR=value prefixes (LD_PRELOAD=…) and paths (./ls) can run anything.
     if "=" in name or "/" in name:
         return False
@@ -564,15 +669,27 @@ _STEP_LIMIT = (
 )
 
 
-def build_brave_prompt(task: str, steps: list[CommandResult], notice: Optional[str] = None) -> str:
+def build_brave_prompt(
+    task: str,
+    steps: list[CommandResult],
+    notice: Optional[str] = None,
+    piped: Optional[str] = None,
+) -> str:
     """The task plus every command run so far, framed as the model's own history.
 
     Providers are single-turn, so without the framing models read the transcript
     as part of the task and re-run commands that already succeeded.
+    piped is input the user piped to seer (`git log | seer -b …`), given up front.
     """
-    parts = [f"Task: {task}"]
+    parts = []
+    if piped:
+        parts.append(
+            "Input the user piped to seer for this task:\n"
+            f"```\n{truncate_output(piped, MAX_PIPED_CHARS)}\n```"
+        )
+    parts.append(f"Task: {task}")
     if not steps:
-        return parts[0]
+        return "\n\n".join(parts)
     parts.append("Commands you have already run for this task, with their results:")
     for n, step in enumerate(steps, 1):
         if step.declined:
@@ -608,6 +725,7 @@ def run_brave(
     execute: Callable[[str], CommandResult] = run_command,
     max_steps: int = MAX_STEPS,
     confirm_policy: str = "auto",
+    piped: Optional[str] = None,
 ) -> str:
     """Drive the brave-mode loop and return the final answer (Markdown).
 
@@ -623,7 +741,7 @@ def run_brave(
             notice = _DECLINED
         elif notice is None and len(steps) >= max_steps:
             notice = _STEP_LIMIT
-        reply = complete(build_brave_prompt(task, steps, notice))
+        reply = complete(build_brave_prompt(task, steps, notice, piped))
         proposed = extract_command(reply)
         if proposed is None:
             return reply

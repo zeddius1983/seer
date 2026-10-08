@@ -116,7 +116,9 @@ class ClaudeCLIProvider(_CLIProvider):
         return argv
 
     def _parse(self, event: dict) -> Iterator[str]:
-        if event.get("type") == "stream_event":
+        if event.get("type") == "system" and event.get("subtype") == "init":
+            self.resolved_model = event.get("model") or self.resolved_model
+        elif event.get("type") == "stream_event":
             inner = event.get("event", {})
             delta = inner.get("delta", {})
             if inner.get("type") == "content_block_delta" and delta.get("type") == "text_delta":
@@ -128,8 +130,24 @@ class ClaudeCLIProvider(_CLIProvider):
         return self._run_with_fallback(lambda model: self._argv(system, model), prompt)
 
 
+# Codex as a plain model, like claude with --tools "". Without a shell of its
+# own, seer runs the commands (brave mode) from the user's directory and with
+# its confirmations. The sections Codex adds describe its sandbox and working
+# directory (seer's cache dir), which contradict brave mode's instructions —
+# the model answers "the filesystem is read-only" instead of a run block.
+_CODEX_QUIET = (
+    "features.shell_tool=false",
+    "features.unified_exec=false",
+    "features.plugins=false",
+    "include_permissions_instructions=false",
+    "include_environment_context=false",
+    "include_collaboration_mode_instructions=false",
+    "skills.include_instructions=false",
+)
+
+
 class CodexCLIProvider(_CLIProvider):
-    def _argv(self, model) -> list[str]:
+    def _argv(self, model, instructions_file: str) -> list[str]:
         argv = [
             self.path, "exec",
             "--json",
@@ -141,6 +159,12 @@ class CodexCLIProvider(_CLIProvider):
             argv += ["--model", model]
         if self.cfg.reasoning_effort:
             argv += ["-c", f"model_reasoning_effort={self.cfg.reasoning_effort}"]
+        for setting in _CODEX_QUIET:
+            argv += ["-c", setting]
+        # Replaces Codex's own agent instructions, like claude's --system-prompt.
+        # Sent as part of the prompt instead, they lose to Codex's — e.g. in
+        # brave mode it answers "I can't run commands" rather than a run block.
+        argv += ["-c", f"model_instructions_file={json.dumps(instructions_file)}"]
         return argv + ["-"]
 
     def _parse(self, event: dict) -> Iterator[str]:
@@ -156,8 +180,16 @@ class CodexCLIProvider(_CLIProvider):
             self._fail(_unwrap_api_error(msg or "request failed"))
 
     def stream(self, system: str, prompt: str) -> Iterator[str]:
-        # codex exec has no system-prompt flag; prepend it to the prompt.
-        return self._run_with_fallback(self._argv, f"{system}\n\n---\n\n{prompt}")
+        # codex exec has no system-prompt flag; it reads instructions from a file.
+        with tempfile.NamedTemporaryFile("w", suffix=".md", prefix="seer-") as f:
+            f.write(system)
+            f.flush()
+            # One reply per call, like the API providers. Codex keeps the turn
+            # going after its first message (e.g. "I couldn't run that" after a
+            # run block); stopping here ends the process.
+            for message in self._run_with_fallback(lambda model: self._argv(model, f.name), prompt):
+                yield message
+                return
 
 
 def _unwrap_api_error(message: str) -> str:

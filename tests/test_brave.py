@@ -71,6 +71,16 @@ class TestIsReadOnly:
         "find . -name '*.py' -exec wc -l {} \\; | sort -nr | head -n 1",
         "find . -name '*.py' -exec wc -l {} ';'",
         "ps aux | awk '{print $2, $11}' | sort -k1 -n",
+        "cd /home/user/repo && git show --stat --format='=== %h %s%n%b' bc078ca fcd27ea | head -120",
+        "for c in fcd27ea 97cc8b5; do git show --stat --format='=== %h %s' $c | cut -c1-110 | head -30; done",
+        "cd repo && for c in a b \\\n; do git show --stat ${c} \\\n| head -30 \\\n; done",
+        "for f in *.py\ndo\n  wc -l $f\ndone | sort -n",
+        "for d in src tests; do for f in a b; do ls $d/$f; done; done",
+        "for c in ls; do $c; done",          # runs ls: each value is checked in place
+        "for f in *.py; do wc -l $f; done",  # wc's arguments can't make it write
+        "find . -name '*.py' -o -name \"*.md\"",
+        "grep \"$HOME\" notes.txt",
+        "for c in a; do echo '$c'; done",
     ])
     def test_read_only(self, command):
         assert is_read_only(command)
@@ -130,6 +140,23 @@ class TestIsReadOnly:
         # The shell only treats '#' as a comment at the start of a word.
         "ls a#;rm -rf x",
         "echo 'unterminated",
+        # loops: the body is checked with each value in place of the variable
+        "for c in --output=x; do git show $c; done",
+        "for c in a b; do rm $c; done",
+        "for c in a out; do uniq in $c; done",
+        "for c in rm; do $c x; done",
+        # globs and variables expand to arguments the check never sees
+        "for f in *.py; do sort $f input; done",
+        "for f in $FILES; do sort $f; done",
+        "sort *.py input",
+        "sort $X",
+        "find . -name *.py",
+        "ls > $OUT",
+        "for c; do git show $c; done",
+        "for c in 'a b'; do git show $c; done",
+        "for c in a; do ls $c",
+        "do ls; done",
+        "for c in a; do ls $c; done; rm x",
     ])
     def test_needs_confirmation(self, command):
         assert not is_read_only(command)
@@ -315,6 +342,17 @@ class TestBuildPrompt:
         assert "[4] $ sleep 99\ntimed out after 60s" in prompt
         assert "Check every part of the task" in prompt
 
+    def test_piped_input_comes_before_the_task(self):
+        prompt = build_brave_prompt("explain", [], piped="abc123 fix bug")
+        assert prompt == (
+            "Input the user piped to seer for this task:\n```\nabc123 fix bug\n```\n\nTask: explain"
+        )
+
+    def test_long_piped_input_is_truncated(self):
+        prompt = build_brave_prompt("explain", [], piped="x" * 50_000)
+        assert "characters omitted" in prompt
+        assert len(prompt) < 25_000
+
     def test_notice_replaces_next_step_hint(self):
         prompt = build_brave_prompt("task", [CommandResult("ls", "", 0)], notice="STOP")
         assert prompt.endswith("STOP")
@@ -343,6 +381,11 @@ def _never_confirm(command):
 
 
 class TestRunBrave:
+    def test_piped_input_is_in_every_prompt(self):
+        complete = _scripted("```run\ngit show --stat abc123\n```", "done")
+        run_brave("explain", complete, _never_confirm, execute=_fake_execute, piped="abc123 fix bug")
+        assert all("abc123 fix bug" in prompt for prompt in complete.prompts)
+
     def test_answers_directly_without_commands(self):
         answer = run_brave("hi", _scripted("hello"), _never_confirm, execute=_fake_execute)
         assert answer == "hello"

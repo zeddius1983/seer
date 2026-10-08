@@ -20,6 +20,7 @@ class OpenAIProvider(Provider):
         self.model = cfg.model
         self.base_url = (cfg.base_url or OPENAI_BASE_URL).rstrip("/")
         self.api_key = cfg.api_key or os.environ.get("OPENAI_API_KEY") or "sk-no-key"
+        self.effort = cfg.reasoning_effort
 
     def stream(self, system: str, prompt: str) -> Iterator[str]:
         headers = {
@@ -34,6 +35,8 @@ class OpenAIProvider(Provider):
                 {"role": "user", "content": prompt},
             ],
         }
+        if self.effort:   # local servers may reject it, so only when configured
+            payload["reasoning_effort"] = self.effort
 
         with httpx.Client(timeout=httpx.Timeout(10.0, read=300.0)) as client:
             with client.stream(
