@@ -165,7 +165,11 @@ providers:
     base_url: http://myserver:8080/v1
     api_key: none
     model: my-model                  # or auto: the first model the server lists
+    max_tokens: 16000                # optional: output cap per call, reasoning included
+    reasoning_effort: low            # optional: only for servers and models that support it
 ```
+
+Reasoning models think before they answer. While they do, the status line counts it (`thinking… (reasoning, 1,234 words)`), and `max_tokens` stops one that would think indefinitely: seer then says it hit the limit instead of waiting.
 
 </details>
 

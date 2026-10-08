@@ -66,5 +66,6 @@ class TracedProvider:
                 prompt_chars=len(prompt),
                 seconds=round(time.monotonic() - began, 2),
                 resolved_model=getattr(self._provider, "resolved_model", None),
+                reasoning_words=len((getattr(self._provider, "reasoning", "") or "").split()),
                 reply="".join(reply),
             )

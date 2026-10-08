@@ -68,6 +68,18 @@ class TestClaudeCLI:
         list(provider.stream("SYS", "PROMPT"))
         assert provider.resolved_model == "claude-sonnet-5-5"
 
+    def test_collects_thinking_as_reasoning(self, tmp_path):
+        cmd = _fake_cli(tmp_path, "claude", [
+            {"type": "stream_event", "event": {"type": "content_block_delta",
+                                               "delta": {"type": "thinking_delta", "thinking": "hmm, "}}},
+            {"type": "stream_event", "event": {"type": "content_block_delta",
+                                               "delta": {"type": "thinking_delta", "thinking": "ls -S"}}},
+            _text_delta("Use ls -S"),
+        ])
+        provider = get_provider(ProviderConfig(type="claude-cli", model="sonnet", command=cmd))
+        assert "".join(provider.stream("SYS", "PROMPT")) == "Use ls -S"
+        assert provider.reasoning == "hmm, ls -S"
+
     def test_model_auto_omits_model_flag(self, tmp_path):
         cmd = _fake_cli(tmp_path, "claude", [_text_delta("ok")])
         provider = get_provider(ProviderConfig(type="claude-cli", model="auto", command=cmd))
