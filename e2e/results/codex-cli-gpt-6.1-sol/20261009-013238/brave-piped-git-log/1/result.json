@@ -1,0 +1,53 @@
+{
+  "id": "brave-piped-git-log",
+  "passed": true,
+  "checks": [
+    {
+      "check": "finished",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "no_errors",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "mode",
+      "ok": true,
+      "detail": "got brave"
+    },
+    {
+      "check": "confirmations",
+      "ok": true,
+      "detail": "0 prompts"
+    },
+    {
+      "check": "answer_contains",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "metrics": {
+    "mode": "brave",
+    "provider": "codex-cli",
+    "model": "gpt-6.1-sol",
+    "resolved_model": null,
+    "llm_calls": 3,
+    "llm_seconds": 22.1,
+    "max_prompt_chars": 6366,
+    "commands": [
+      "git status --short && git show --stat ba60465 818ddf1 0261cfa 70c1f96 6be7ccc && git log -5 --format='%h %s'",
+      "git show --format=fuller ba60465 818ddf1 0261cfa 70c1f96 6be7ccc"
+    ],
+    "confirmations": 0,
+    "edited": 0,
+    "declined": 0,
+    "errors": [],
+    "answer": "- **`ba60465` — Bump version to 0.2.0:** Creates `VERSION` containing `0.2.0`; it does not update an existing version file.\n\n- **`818ddf1` — Add average report:** Adds `src/report.py` with an arithmetic-mean function and a command-line interface that converts arguments to floats and prints the average. Empty input causes division by zero; invalid numeric arguments raise an error. No tests added.\n\n- **`0261cfa` — wip:** Adds `src/retry.py`: retries a function on `ConnectionError`, defaulting to three total attempts with exponential delays of 0.5 then 1 second. Returns immediately on success and re-raises the final failure. Adds a test for immediate success, but none for retries or exhausted attempts.\n\n- **`70c1f96` — Fix off-by-one in pagination:** Changes the range endpoint in `src/pager.py` from `len(items) - 1` to `len(items)`, preserving a final page containing one item. Adds a regression test expecting `[[1, 2, 3], [4]]`.\n\n- **`6be7ccc` — Add CLI entry point:** Adds `src/app.py`, which generates integers from zero up to an optional count (default 10), paginates them in groups of three, and prints each page. Adds the original pagination helper, an empty package initializer, a brief README, and ignore rules for `data/`, `logs/`, and `__pycache__/`. The original pagination bug is fixed by `70c1f96`."
+  },
+  "exit_code": 0,
+  "timed_out": false,
+  "seconds": 22.3,
+  "answers_given": []
+}

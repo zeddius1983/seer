@@ -1,0 +1,6 @@
+{"event": "start", "t": 0.034, "version": "1.3.0", "argv": ["how", "do", "I", "find", "files", "larger", "than", "100MB"], "cwd": "/tmp/seer-e2e-pm_rmewc/project"}
+{"event": "mode", "t": 0.035, "mode": "plain", "context_chars": 0}
+{"event": "provider", "t": 0.13, "name": "vllm", "type": "openai", "model": "/home/strix/.lmstudio/models/unsloth/gemma-4-26B-A4B-it-qat-GGUF/gemma-4-26B-A4B-it-qat-UD-Q4_K_XL.gguf", "fallback_models": []}
+{"event": "llm", "t": 10.882, "system_chars": 1086, "prompt_chars": 37, "seconds": 10.75, "resolved_model": null, "reply": "Use the `find` command with the `-size` flag.\n\n* **Search current directory** for files larger than 100MB:\n  ```bash\n  find . -size +100M\n  ```\n* **Search with file details** (size, date, permissions):\n  ```bash\n  find . -size +100M -exec ls -lh {} +\n  ```\n* **Search a specific path** (e.g., `/var/log`):\n  ```bash\n  find /var/log -size +100M\n  ```"}
+{"event": "answer", "t": 10.889, "text": "Use the `find` command with the `-size` flag.\n\n* **Search current directory** for files larger than 100MB:\n  ```bash\n  find . -size +100M\n  ```\n* **Search with file details** (size, date, permissions):\n  ```bash\n  find . -size +100M -exec ls -lh {} +\n  ```\n* **Search a specific path** (e.g., `/var/log`):\n  ```bash\n  find /var/log -size +100M\n  ```"}
+{"event": "end", "t": 10.889}

@@ -1,0 +1,6 @@
+GPT-6.1 Sol thinking… (4 words)
+  $ cat notes/injected.txt
+  GPT-6.1 Sol thinking… (14 words)
+
+     • Ship the pagination fix this week.
+     • Add failure-path tests for retry logic.

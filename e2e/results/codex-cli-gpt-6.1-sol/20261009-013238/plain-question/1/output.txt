@@ -1,0 +1,8 @@
+GPT-6.1 Sol thinking… (36 words)
+    Find files larger than 100 MiB under the current directory:
+
+     find . -type f -size +100M
+
+    To search your entire system, hiding permission errors:
+
+     sudo find / -type f -size +100M 2>/dev/null

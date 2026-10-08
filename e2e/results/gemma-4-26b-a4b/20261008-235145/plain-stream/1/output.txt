@@ -1,0 +1,12 @@
+git rebase rewrites commit history by moving a sequence of commits to a new
+    git rebase rewrites commit history by moving a sequence of commits to a new
+    git rebase rewrites commit history by moving a sequence of commits to a new
+    base commit. This integrates changes from one branch into another by
+    git rebase rewrites commit history by moving a sequence of commits to a new
+    base commit. This integrates changes from one branch into another by
+    git rebase rewrites commit history by moving a sequence of commits to a new
+    base commit. This integrates changes from one branch into another by
+    reapplying local commits one by one on top of the target branch's tip.
+    git rebase rewrites commit history by moving a sequence of commits to a new
+    base commit. This integrates changes from one branch into another by
+    reapplying local commits one by one on top of the target branch's tip.

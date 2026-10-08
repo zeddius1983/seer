@@ -1,0 +1,12 @@
+gemma-4-26B-A4B-it-qat-UD-Q4_K_XL thinking… (8 words)
+  $ git log --oneline | grep "wip"
+  gemma-4-26B-A4B-it-qat-UD-Q4_K_XL thinking… (5 words)
+  $ git show 0261cfa
+  gemma-4-26B-A4B-it-qat-UD-Q4_K_XL thinking… (29 words)
+
+    The commit wip created two new files:
+
+     • src/retry.py: implemented a retry function with exponential backoff for
+       ConnectionError.
+     • tests/test_retry.py: added a test case test_returns_first_success for the
+       retry function.

@@ -1,0 +1,14 @@
+gemma-4-26B-A4B-it-qat-UD-Q4_K_XL thinking… (53 words)
+    Add a conditional check to handle empty lists in the average function.
+
+    The script fails because no command-line arguments were provided, making
+    len(values) equal to 0.
+
+     • Fix in report.py:
+
+        def average(values):
+            return sum(values) / len(values) if values else 0
+
+     • Run with arguments:
+
+        python3 report.py 10 20 30

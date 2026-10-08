@@ -1,0 +1,55 @@
+{
+  "id": "brave-command-timeout",
+  "passed": true,
+  "checks": [
+    {
+      "check": "finished",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "no_errors",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "mode",
+      "ok": true,
+      "detail": "got brave"
+    },
+    {
+      "check": "min_confirmations",
+      "ok": true,
+      "detail": "1 prompts"
+    },
+    {
+      "check": "answer_contains",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "metrics": {
+    "mode": "brave",
+    "provider": "vllm",
+    "model": "/home/strix/.lmstudio/models/unsloth/gemma-4-26B-A4B-it-qat-GGUF/gemma-4-26B-A4B-it-qat-UD-Q4_K_XL.gguf",
+    "resolved_model": null,
+    "llm_calls": 3,
+    "llm_seconds": 44.4,
+    "max_prompt_chars": 593,
+    "commands": [
+      "./slow.sh",
+      "cat ./slow.sh"
+    ],
+    "confirmations": 1,
+    "edited": 0,
+    "declined": 0,
+    "errors": [],
+    "answer": "The script `./slow.sh` prints `finished` after a 90-second sleep, though it will time out and print nothing if executed within the 60-second limit."
+  },
+  "exit_code": 0,
+  "timed_out": false,
+  "seconds": 104.8,
+  "answers_given": [
+    "y"
+  ]
+}

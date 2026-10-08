@@ -1,0 +1,56 @@
+{
+  "id": "brave-confirm-always",
+  "passed": true,
+  "checks": [
+    {
+      "check": "finished",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "no_errors",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "mode",
+      "ok": true,
+      "detail": "got brave"
+    },
+    {
+      "check": "min_confirmations",
+      "ok": true,
+      "detail": "2 prompts"
+    },
+    {
+      "check": "answer_contains",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "metrics": {
+    "mode": "brave",
+    "provider": "vllm",
+    "model": "/home/strix/.lmstudio/models/unsloth/gemma-4-26B-A4B-it-qat-GGUF/gemma-4-26B-A4B-it-qat-UD-Q4_K_XL.gguf",
+    "resolved_model": null,
+    "llm_calls": 3,
+    "llm_seconds": 26.6,
+    "max_prompt_chars": 712,
+    "commands": [
+      "du -ah . | sort -rh | head -n 3",
+      "find . -type f -exec du -h {} + | sort -rh | head -n 3"
+    ],
+    "confirmations": 2,
+    "edited": 0,
+    "declined": 0,
+    "errors": [],
+    "answer": "1. `2,0M ./data/archive.gz`\n2. `292K ./data/sample.csv`\n3. `148K ./logs/big.log`"
+  },
+  "exit_code": 0,
+  "timed_out": false,
+  "seconds": 26.8,
+  "answers_given": [
+    "y",
+    "y"
+  ]
+}

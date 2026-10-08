@@ -1,0 +1,8 @@
+{"event": "start", "t": 0.035, "version": "1.3.0", "argv": ["-p", "codex-cli", "-m", "gpt-6.1-sol", "-b", "summarize", "the", "commits", "on", "the", "feature/import", "branch", "that", "are", "not", "on", "main"], "cwd": "/tmp/seer-e2e-4r43lshv/project"}
+{"event": "mode", "t": 0.036, "mode": "brave", "piped_chars": 0}
+{"event": "provider", "t": 0.037, "name": "codex-cli", "type": "codex-cli", "model": "gpt-6.1-sol", "fallback_models": []}
+{"event": "llm", "t": 4.331, "system_chars": 3175, "prompt_chars": 77, "seconds": 4.29, "resolved_model": null, "reasoning_words": 0, "reply": "```run\ngit log main..feature/import --format='%h %s' && git diff --stat main...feature/import\n```"}
+{"event": "command", "t": 4.335, "command": "git log main..feature/import --format='%h %s' && git diff --stat main...feature/import", "exit_code": 0, "asked": false, "output_chars": 162, "output": "27d159e Handle empty CSV files\nea0ba97 Add CSV importer\n src/importer.py        | 6 ++++++\n tests/test_importer.py | 7 +++++++\n 2 files changed, 13 insertions(+)"}
+{"event": "llm", "t": 9.704, "system_chars": 3175, "prompt_chars": 771, "seconds": 5.37, "resolved_model": null, "reasoning_words": 0, "reply": "`feature/import` has two commits not on `main`:\n\n- `ea0ba97` — Add CSV importer.\n- `27d159e` — Handle empty CSV files.\n\nOverall: 13 lines added across `src/importer.py` and `tests/test_importer.py`."}
+{"event": "answer", "t": 9.705, "text": "`feature/import` has two commits not on `main`:\n\n- `ea0ba97` — Add CSV importer.\n- `27d159e` — Handle empty CSV files.\n\nOverall: 13 lines added across `src/importer.py` and `tests/test_importer.py`."}
+{"event": "end", "t": 9.707}

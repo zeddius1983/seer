@@ -1,0 +1,12 @@
+gemma-4-26B-A4B-it-qat-UD-Q4_K_XL thinking… (4 words)
+    ╭────────────────────────────────────────────────────────────────────────────╮
+    │ git branch                                                                 │
+    ╰────────────────────────────────────────────────────────────────────────────╯
+Run this command? [Y/n/e] [y]: n
+  gemma-4-26B-A4B-it-qat-UD-Q4_K_XL thinking… (34 words)
+
+    I was unable to proceed because the previous command was declined. You can run
+    the following command to summarize the commits on feature/import that are not
+    on main:
+
+     git log main..feature/import --oneline

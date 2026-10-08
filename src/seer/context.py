@@ -63,6 +63,30 @@ def _read_stdin_until_idle(idle_timeout: float = 1.0) -> Tuple[str, bool]:
     return "".join(chunks), got_eof
 
 
+def read_stdin_to_eof(on_wait=None, wait_after: float = 2.0) -> str:
+    """Read all of stdin, however long the piped command takes.
+
+    No idle cut-off: a pause doesn't mean the input is complete
+    (`(echo a; sleep 2; echo b) | seer -b …`). on_wait() is called once if
+    nothing arrives for wait_after seconds, to tell the user what seer is
+    waiting for.
+    """
+    fd = sys.stdin.fileno()
+    chunks = []
+    waited = False
+    while True:
+        ready, _, _ = select.select([sys.stdin], [], [], wait_after)
+        if not ready:
+            if on_wait and not waited:
+                on_wait()
+                waited = True
+            continue
+        chunk = os.read(fd, 65536)
+        if not chunk:
+            return "".join(chunks)
+        chunks.append(chunk.decode("utf-8", errors="replace"))
+
+
 def read_stdin_batches(interval: float = 15.0) -> Generator[str, None, None]:
     """Yield batches of stdin lines on a fixed time window.
 

@@ -1,0 +1,8 @@
+{"event": "start", "t": 0.032, "version": "1.3.0", "argv": ["-b", "summarize", "the", "commits", "on", "the", "feature/import", "branch", "that", "are", "not", "on", "main"], "cwd": "/tmp/seer-e2e-47wol417/project"}
+{"event": "mode", "t": 0.034, "mode": "brave", "piped_chars": 0}
+{"event": "provider", "t": 0.122, "name": "vllm", "type": "openai", "model": "/home/strix/.lmstudio/models/unsloth/gemma-4-26B-A4B-it-qat-GGUF/gemma-4-26B-A4B-it-qat-UD-Q4_K_XL.gguf", "fallback_models": []}
+{"event": "llm", "t": 2.362, "system_chars": 3175, "prompt_chars": 77, "seconds": 2.23, "resolved_model": null, "reply": "```run\ngit branch\n```"}
+{"event": "confirm", "t": 2.366, "command": "git branch", "final": null, "decision": "declined"}
+{"event": "llm", "t": 9.203, "system_chars": 3175, "prompt_chars": 438, "seconds": 6.84, "resolved_model": null, "reply": "I couldn't run any commands because you declined the initial request. You can summarize the commits on the `feature/import` branch that are not on `main` by running:\n\n```bash\ngit log main..feature/import --oneline\n```"}
+{"event": "answer", "t": 9.204, "text": "I couldn't run any commands because you declined the initial request. You can summarize the commits on the `feature/import` branch that are not on `main` by running:\n\n```bash\ngit log main..feature/import --oneline\n```"}
+{"event": "end", "t": 9.207}

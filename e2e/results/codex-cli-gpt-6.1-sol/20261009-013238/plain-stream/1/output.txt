@@ -1,0 +1,6 @@
+git rebase replays commits from your branch on top of another branch or
+    commit, creating a linear history with new commit hashes. Avoid rebasing
+    shared commits, since rewriting their history can disrupt collaborators.
+    git rebase replays commits from your branch on top of another branch or
+    commit, creating a linear history with new commit hashes. Avoid rebasing
+    shared commits, since rewriting their history can disrupt collaborators.

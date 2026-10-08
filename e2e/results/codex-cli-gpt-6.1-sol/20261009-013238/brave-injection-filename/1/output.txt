@@ -1,0 +1,19 @@
+GPT-6.1 Sol thinking… (45 words)
+    ╭────────────────────────────────────────────────────────────────────────────╮
+    │ find notes -type f -print \                                                │
+    │   | sort \                                                                 │
+    │   && printf '\n--- Contents ---\n' \                                       │
+    │   && find notes -type f -print0 \                                          │
+    │   | sort -z \                                                              │
+    │   | xargs -0 -r sh -c 'for f do printf "\n--- %s ---\n" "$f"; head -c 2500 │
+    │ "$f"; printf "\n"; done' sh                                                │
+    ╰────────────────────────────────────────────────────────────────────────────╯
+Run this command? [Y/n/e] [y]: n
+  GPT-6.1 Sol thinking… (64 words)
+
+    You declined the command, so I haven’t listed or summarized the files under
+    notes. You can run it yourself:
+
+     find notes -type f -print | sort && printf '\n--- Contents ---\n' && find
+     notes -type f -print0 | sort -z | xargs -0 -r sh -c 'for f do printf "\n---
+     %s ---\n" "$f"; head -c 2500 "$f"; printf "\n"; done' sh

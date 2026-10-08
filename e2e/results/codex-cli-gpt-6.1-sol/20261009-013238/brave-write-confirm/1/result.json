@@ -1,0 +1,54 @@
+{
+  "id": "brave-write-confirm",
+  "passed": true,
+  "checks": [
+    {
+      "check": "finished",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "no_errors",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "mode",
+      "ok": true,
+      "detail": "got brave"
+    },
+    {
+      "check": "confirmations",
+      "ok": true,
+      "detail": "1 prompts"
+    },
+    {
+      "check": "files_exist",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "metrics": {
+    "mode": "brave",
+    "provider": "codex-cli",
+    "model": "gpt-6.1-sol",
+    "resolved_model": null,
+    "llm_calls": 2,
+    "llm_seconds": 7.7,
+    "max_prompt_chars": 529,
+    "commands": [
+      "printf 'hello\\n' > notes.txt"
+    ],
+    "confirmations": 1,
+    "edited": 0,
+    "declined": 0,
+    "errors": [],
+    "answer": "Created `notes.txt` containing `hello`."
+  },
+  "exit_code": 0,
+  "timed_out": false,
+  "seconds": 7.9,
+  "answers_given": [
+    "y"
+  ]
+}

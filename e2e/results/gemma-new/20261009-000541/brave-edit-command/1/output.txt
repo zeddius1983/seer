@@ -1,0 +1,23 @@
+gemma-4-26B-A4B-it-qat-UD-Q4_K_XL thinking… (5 words)
+  $ ls -l logs/big.log
+  gemma-4-26B-A4B-it-qat-UD-Q4_K_XL thinking… (4 words)
+    ╭────────────────────────────────────────────────────────────────────────────╮
+    │ rm logs/big.log                                                            │
+    ╰────────────────────────────────────────────────────────────────────────────╯
+Run this command? [Y/n/e] [y]: e
+ls -la logs
+    ╭────────────────────────────────────────────────────────────────────────────╮
+    │ ls -la logs                                                                │
+    ╰────────────────────────────────────────────────────────────────────────────╯
+Run this command? [Y/n/e] [y]: y
+  gemma-4-26B-A4B-it-qat-UD-Q4_K_XL thinking… (4 words)
+    ╭────────────────────────────────────────────────────────────────────────────╮
+    │ rm logs/big.log                                                            │
+    ╰────────────────────────────────────────────────────────────────────────────╯
+Run this command? [Y/n/e] [y]: n
+  gemma-4-26B-A4B-it-qat-UD-Q4_K_XL thinking… (26 words)
+
+    You declined to delete the file, so logs/big.log remains on your system. You
+    can run the following command to delete it yourself:
+
+     rm logs/big.log

@@ -1,0 +1,57 @@
+{
+  "id": "brave-big-log",
+  "passed": false,
+  "checks": [
+    {
+      "check": "finished",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "no_errors",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "mode",
+      "ok": true,
+      "detail": "got brave"
+    },
+    {
+      "check": "confirmations",
+      "ok": false,
+      "detail": "1 prompts"
+    },
+    {
+      "check": "answer_contains",
+      "ok": false,
+      "detail": "missing: ['137', 'database connection timeout']"
+    },
+    {
+      "check": "commands_exclude",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "metrics": {
+    "mode": "brave",
+    "provider": "codex-cli",
+    "model": "gpt-6.1-sol",
+    "resolved_model": null,
+    "llm_calls": 2,
+    "llm_seconds": 13.1,
+    "max_prompt_chars": 880,
+    "commands": [],
+    "confirmations": 1,
+    "edited": 0,
+    "declined": 1,
+    "errors": [],
+    "answer": "You declined the command, so your log wasn’t analyzed. You can run this yourself:\n\n```bash\npython3 -c 'from collections import Counter; import re\ncount=0; messages=Counter()\nwith open(\"logs/big.log\", errors=\"replace\") as f:\n    for line in f:\n        match=re.search(r\"\\bERROR\\b\", line)\n        if match:\n            count+=1\n            messages[line[match.end():].strip().lstrip(\":\").strip()]+=1\nprint(f\"ERROR lines: {count}\")\nfor message,n in messages.most_common(1):\n    print(f\"Most common message ({n} occurrences): {message}\")'\n```"
+  },
+  "exit_code": 0,
+  "timed_out": false,
+  "seconds": 13.3,
+  "answers_given": [
+    "n"
+  ]
+}

@@ -1,0 +1,17 @@
+gemma-4-26B-A4B-it-qat-UD-Q4_K_XL thinking… (4 words)
+  $ ls config.yml
+    exit code 2
+  gemma-4-26B-A4B-it-qat-UD-Q4_K_XL thinking… (4 words)
+  $ ls -R
+  gemma-4-26B-A4B-it-qat-UD-Q4_K_XL thinking… (4 words)
+  $ cat config.yaml
+  gemma-4-26B-A4B-it-qat-UD-Q4_K_XL thinking… (18 words)
+
+     server:
+       host: 0.0.0.0
+       port: 8080
+        workers: 4
+     database:
+       url: postgres://localhost/app
+
+    (Note: The file is named config.yaml)

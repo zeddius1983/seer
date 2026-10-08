@@ -191,29 +191,60 @@ class TestBravePipedInput:
         monkeypatch.setattr(cli, "_cmd_brave", lambda task, cfg, raw, piped=None: calls["brave"].append((task, piped)))
         monkeypatch.setattr(cli, "_cmd_watch", lambda first, focus, *a: calls["watch"].append((first, focus)))
 
-        def invoke(stdin, got_eof, *args):
-            monkeypatch.setattr(cli, "_read_stdin_until_idle", lambda idle_timeout=1.0: (stdin, got_eof))
+        def invoke(stdin, *args):
+            def read(on_wait=None, wait_after=2.0):
+                if isinstance(stdin, BaseException):
+                    raise stdin
+                return stdin
+            monkeypatch.setattr(cli, "read_stdin_to_eof", read)
             result = CliRunner().invoke(cli.main, ["-b", *args, "explain", "commits"])
             assert result.exit_code == 0, result.output
+            calls["output"] = result.output
             return calls
 
         return invoke
 
     def test_piped_input_is_passed_to_brave_mode(self, invoke):
-        calls = invoke("abc123 fix bug\n", True)
+        calls = invoke("abc123 fix bug\n")
         assert calls["brave"] == [("explain commits", "abc123 fix bug")]
         assert calls["reattached"] == 1
-
-    def test_open_stream_goes_to_watch_mode(self, invoke):
-        calls = invoke("line 1\n", False)
-        assert calls["watch"] == [("line 1\n", "explain commits")]
-        assert calls["brave"] == []
+        assert calls["watch"] == []   # brave reads to the end; it never switches to watch mode
 
     def test_empty_pipe_runs_brave_without_input(self, invoke):
-        calls = invoke("", False)
+        calls = invoke("")
         assert calls["brave"] == [("explain commits", None)]
 
     def test_no_context_ignores_piped_input(self, invoke):
-        calls = invoke("abc123 fix bug\n", True, "--no-context")
+        calls = invoke("abc123 fix bug\n", "--no-context")
         assert calls["brave"] == [("explain commits", None)]
         assert calls["reattached"] == 1
+
+    def test_ctrl_c_while_waiting_for_input_stops_cleanly(self, invoke):
+        calls = invoke(KeyboardInterrupt())
+        assert calls["brave"] == []
+        assert "Stopped" in calls["output"]
+
+
+def test_read_stdin_to_eof_waits_through_pauses(monkeypatch):
+    """A pause longer than watch mode's 1s idle cut-off isn't the end of input:
+    `(echo first; sleep 2; echo second) | seer -b …` must get both lines."""
+    import os
+    import threading
+    import time
+    from seer import context
+
+    read_fd, write_fd = os.pipe()
+
+    def writer():
+        os.write(write_fd, b"first\n")
+        time.sleep(0.6)
+        os.write(write_fd, b"second\n")
+        os.close(write_fd)
+
+    waits = []
+    with os.fdopen(read_fd) as stdin:
+        monkeypatch.setattr(context.sys, "stdin", stdin)
+        threading.Thread(target=writer).start()
+        data = context.read_stdin_to_eof(on_wait=lambda: waits.append(1), wait_after=0.2)
+    assert data == "first\nsecond\n"
+    assert waits == [1]   # told the user once, not on every quiet interval

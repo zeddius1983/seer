@@ -1,0 +1,10 @@
+Watch mode — press Ctrl+C to stop.
+
+─── batch 1 (15s window) ───
+
+  gemma-4-26B-A4B-it-qat-UD-Q4_K_XL thinking… (6 words)
+    ERROR: Disk usage is above 90%.
+─── batch 2 (15s window) ───
+
+  gemma-4-26B-A4B-it-qat-UD-Q4_K_XL thinking… (6 words)
+    ERROR: Disk usage is above 95%.

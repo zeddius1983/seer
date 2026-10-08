@@ -1,0 +1,50 @@
+{
+  "id": "piped-traceback",
+  "passed": true,
+  "checks": [
+    {
+      "check": "finished",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "no_errors",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "mode",
+      "ok": true,
+      "detail": "got plain"
+    },
+    {
+      "check": "answer_contains",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "max_llm_calls",
+      "ok": true,
+      "detail": "1 calls"
+    }
+  ],
+  "metrics": {
+    "mode": "plain",
+    "provider": "codex-cli",
+    "model": "gpt-6.1-sol",
+    "resolved_model": null,
+    "llm_calls": 1,
+    "llm_seconds": 5.0,
+    "max_prompt_chars": 512,
+    "commands": [],
+    "confirmations": 0,
+    "edited": 0,
+    "declined": 0,
+    "errors": [],
+    "answer": "**Handle empty input before dividing:**\n\n```python\ndef average(values):\n    if not values:\n        raise ValueError(\"Provide at least one number\")\n    return sum(values) / len(values)\n```\n\nYou ran the script without numeric arguments, so `values` is empty and `len(values)` is `0`.\n\nPass numbers when running it:\n\n```bash\npython src/report.py 10 20 30\n```"
+  },
+  "exit_code": 0,
+  "timed_out": false,
+  "seconds": 5.2,
+  "answers_given": []
+}

@@ -76,6 +76,11 @@ class TestIsReadOnly:
         "cd repo && for c in a b \\\n; do git show --stat ${c} \\\n| head -30 \\\n; done",
         "for f in *.py\ndo\n  wc -l $f\ndone | sort -n",
         "for d in src tests; do for f in a b; do ls $d/$f; done; done",
+        "for c in ls; do $c; done",          # runs ls: each value is checked in place
+        "for f in *.py; do wc -l $f; done",  # wc's arguments can't make it write
+        "find . -name '*.py' -o -name \"*.md\"",
+        "grep \"$HOME\" notes.txt",
+        "for c in a; do echo '$c'; done",
     ])
     def test_read_only(self, command):
         assert is_read_only(command)
@@ -139,7 +144,14 @@ class TestIsReadOnly:
         "for c in --output=x; do git show $c; done",
         "for c in a b; do rm $c; done",
         "for c in a out; do uniq in $c; done",
-        "for c in ls; do $c; done",
+        "for c in rm; do $c x; done",
+        # globs and variables expand to arguments the check never sees
+        "for f in *.py; do sort $f input; done",
+        "for f in $FILES; do sort $f; done",
+        "sort *.py input",
+        "sort $X",
+        "find . -name *.py",
+        "ls > $OUT",
         "for c; do git show $c; done",
         "for c in 'a b'; do git show $c; done",
         "for c in a; do ls $c",

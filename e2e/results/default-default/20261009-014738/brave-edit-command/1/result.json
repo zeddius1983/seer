@@ -1,0 +1,61 @@
+{
+  "id": "brave-edit-command",
+  "passed": false,
+  "checks": [
+    {
+      "check": "finished",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "no_errors",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "mode",
+      "ok": false,
+      "detail": "got None"
+    },
+    {
+      "check": "commands_include",
+      "ok": false,
+      "detail": "none matched: ['^ls -la logs$']"
+    },
+    {
+      "check": "commands_exclude",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "files_exist",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "metrics": {
+    "mode": null,
+    "provider": null,
+    "model": null,
+    "resolved_model": null,
+    "llm_calls": 0,
+    "llm_seconds": 0,
+    "max_prompt_chars": 0,
+    "commands": [],
+    "confirmations": 0,
+    "edited": 0,
+    "declined": 0,
+    "errors": [],
+    "answer": ""
+  },
+  "exit_code": 0,
+  "timed_out": false,
+  "seconds": 9.0,
+  "answers_given": [
+    {
+      "edit": "ls -la logs"
+    },
+    "y",
+    "n"
+  ]
+}

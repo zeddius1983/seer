@@ -1,0 +1,8 @@
+{"event": "start", "t": 0.033, "version": "1.3.0", "argv": ["list", "the", "3", "largest", "files", "here"], "cwd": "/tmp/seer-e2e-s94d8z7j/project"}
+{"event": "mode", "t": 0.035, "mode": "brave", "piped_chars": 0}
+{"event": "provider", "t": 0.128, "name": "vllm", "type": "openai", "model": "/home/strix/.lmstudio/models/unsloth/gemma-4-26B-A4B-it-qat-GGUF/gemma-4-26B-A4B-it-qat-UD-Q4_K_XL.gguf", "fallback_models": []}
+{"event": "llm", "t": 6.825, "system_chars": 3175, "prompt_chars": 35, "seconds": 6.69, "resolved_model": null, "reply": "```run\nfind . -type f -exec du -h {} + | sort -rh | head -n 3\n```"}
+{"event": "command", "t": 6.83, "command": "find . -type f -exec du -h {} + | sort -rh | head -n 3", "exit_code": 0, "asked": false, "output_chars": 66, "output": "2,0M\t./data/archive.gz\n292K\t./data/sample.csv\n148K\t./logs/big.log"}
+{"event": "llm", "t": 17.291, "system_chars": 3175, "prompt_chars": 601, "seconds": 10.46, "resolved_model": null, "reply": "- `./data/archive.gz` (2,0M)\n- `./data/sample.csv` (292K)\n- `./logs/big.log` (148K)"}
+{"event": "answer", "t": 17.291, "text": "- `./data/archive.gz` (2,0M)\n- `./data/sample.csv` (292K)\n- `./logs/big.log` (148K)"}
+{"event": "end", "t": 17.293}

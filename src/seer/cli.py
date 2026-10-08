@@ -22,7 +22,7 @@ from . import __version__
 from .config import load_config, save_default_config, CONFIG_PATH, DO_SYSTEM_PROMPT, BRAVE_SYSTEM_PROMPT
 from .config import CONTEXT_FILE, CLI_COMMANDS, resolve_cli_command
 from .system_info import format_for_prompt, get_system_info
-from .context import get_context, read_stdin_batches, reattach_tty, _stdin_has_data, _stdin_is_piped, _read_stdin_until_idle
+from .context import get_context, read_stdin_batches, read_stdin_to_eof, reattach_tty, _stdin_has_data, _stdin_is_piped, _read_stdin_until_idle
 from .providers import get_provider
 from .brave import CommandResult, run_brave
 console = Console()
@@ -448,15 +448,20 @@ def main(ctx, query, no_context, raw, brave, stream, provider, model, stats, sho
     is_help = args in ([], ["help"])
 
     # Brave mode: free-form queries only, not help. Piped input becomes the
-    # task's starting context; a still-open stream (tail -f) goes to watch mode.
+    # task's starting context, read to the end: a pause can't tell a slow
+    # command from a live stream, and brave mode needs the whole input anyway.
     use_brave = cfg.brave if brave is None else brave
     if use_brave and not is_help:
         piped = None
         if _stdin_is_piped():
             if not no_context:
-                piped, got_eof = _read_stdin_until_idle(idle_timeout=1.0)
-                if piped and not got_eof:
-                    _cmd_watch(piped, " ".join(args), cfg, raw, stream or cfg.stream)
+                try:
+                    piped = read_stdin_to_eof(on_wait=lambda: err_console.print(
+                        "[dim]Waiting for the piped command to finish… (Ctrl+C to stop; "
+                        "for a live stream like tail -f, use seer without -b)[/dim]"
+                    ))
+                except KeyboardInterrupt:
+                    err_console.print("\n[dim]Stopped.[/dim]")
                     return
                 piped = piped.strip() or None
             reattach_tty()   # so [Y/n/e] reads the keyboard, not the spent pipe

@@ -1,0 +1,8 @@
+{"event": "start", "t": 0.033, "version": "1.3.0", "argv": ["-p", "codex-cli", "-m", "gpt-6.1-sol", "do", "count", "the", "lines", "in", "every", "python", "file", "under", "src"], "cwd": "/tmp/seer-e2e-ap3rf3tw/project"}
+{"event": "mode", "t": 0.035, "mode": "do"}
+{"event": "provider", "t": 0.036, "name": "codex-cli", "type": "codex-cli", "model": "gpt-6.1-sol", "fallback_models": []}
+{"event": "llm", "t": 4.586, "system_chars": 1239, "prompt_chars": 46, "seconds": 4.55, "resolved_model": null, "reasoning_words": 0, "reply": "This counts the lines in each Python file under `src` and shows a total.\n\n```bash\nfind src -type f -name '*.py' -print0 | wc -l --files0-from=-\n```"}
+{"event": "answer", "t": 4.587, "text": "This counts the lines in each Python file under `src` and shows a total.\n\n```bash\nfind src -type f -name '*.py' -print0 | wc -l --files0-from=-\n```"}
+{"event": "confirm", "t": 4.592, "command": "find src -type f -name '*.py' -print0 | wc -l --files0-from=-", "final": "find src -type f -name '*.py' -print0 | wc -l --files0-from=-", "decision": "run"}
+{"event": "command", "t": 4.594, "command": "find src -type f -name '*.py' -print0 | wc -l --files0-from=-", "exit_code": 0, "asked": true}
+{"event": "end", "t": 4.595}

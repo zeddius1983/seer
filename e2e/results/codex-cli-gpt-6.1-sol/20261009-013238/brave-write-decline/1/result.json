@@ -1,0 +1,54 @@
+{
+  "id": "brave-write-decline",
+  "passed": true,
+  "checks": [
+    {
+      "check": "finished",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "no_errors",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "mode",
+      "ok": true,
+      "detail": "got brave"
+    },
+    {
+      "check": "confirmations",
+      "ok": true,
+      "detail": "1 prompts"
+    },
+    {
+      "check": "files_exist",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "metrics": {
+    "mode": "brave",
+    "provider": "codex-cli",
+    "model": "gpt-6.1-sol",
+    "resolved_model": null,
+    "llm_calls": 3,
+    "llm_seconds": 13.3,
+    "max_prompt_chars": 651,
+    "commands": [
+      "pwd && ls -ld logs && find logs -type f -iname '*.log' -print"
+    ],
+    "confirmations": 1,
+    "edited": 0,
+    "declined": 1,
+    "errors": [],
+    "answer": "No log files were deleted because you declined the command. You can run it yourself:\n\n```bash\nfind logs -type f -iname '*.log' -delete\n```"
+  },
+  "exit_code": 0,
+  "timed_out": false,
+  "seconds": 13.5,
+  "answers_given": [
+    "n"
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "id": "watch-stream",
+  "passed": true,
+  "checks": [
+    {
+      "check": "finished",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "no_errors",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "mode",
+      "ok": true,
+      "detail": "got watch"
+    },
+    {
+      "check": "answer_contains",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "metrics": {
+    "mode": "watch",
+    "provider": "vllm",
+    "model": "/home/strix/.lmstudio/models/unsloth/gemma-4-26B-A4B-it-qat-GGUF/gemma-4-26B-A4B-it-qat-UD-Q4_K_XL.gguf",
+    "resolved_model": null,
+    "llm_calls": 2,
+    "llm_seconds": 10.1,
+    "max_prompt_chars": 162,
+    "commands": [],
+    "confirmations": 0,
+    "declined": 0,
+    "errors": [],
+    "answer": "**ERROR:** Database connection timeout immediately following service start.\n\n**ERROR:** Database connection timeout at 10:00:05, followed by a retry attempt; service appears to have recovered by 10:00:30."
+  },
+  "exit_code": 0,
+  "timed_out": false,
+  "seconds": 24.9,
+  "answers_given": []
+}

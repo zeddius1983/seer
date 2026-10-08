@@ -1,0 +1,10 @@
+gemma-4-26B-A4B-it-qat-UD-Q4_K_XL thinking… (12 words)
+  $ du -ah data | sort -rh | head -n 1
+  gemma-4-26B-A4B-it-qat-UD-Q4_K_XL thinking… (18 words)
+  $ find data -type f -exec du -h {} + | sort -rh | head -n 1
+  gemma-4-26B-A4B-it-qat-UD-Q4_K_XL thinking… (4 words)
+  $ file data/archive.gz
+  gemma-4-26B-A4B-it-qat-UD-Q4_K_XL thinking… (14 words)
+
+    The largest file under data is data/archive.gz, which is a gzip compressed
+    data file.

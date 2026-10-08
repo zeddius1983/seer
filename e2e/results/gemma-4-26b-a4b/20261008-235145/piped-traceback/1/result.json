@@ -1,0 +1,49 @@
+{
+  "id": "piped-traceback",
+  "passed": true,
+  "checks": [
+    {
+      "check": "finished",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "no_errors",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "mode",
+      "ok": true,
+      "detail": "got plain"
+    },
+    {
+      "check": "answer_contains",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "max_llm_calls",
+      "ok": true,
+      "detail": "1 calls"
+    }
+  ],
+  "metrics": {
+    "mode": "plain",
+    "provider": "vllm",
+    "model": "/home/strix/.lmstudio/models/unsloth/gemma-4-26B-A4B-it-qat-GGUF/gemma-4-26B-A4B-it-qat-UD-Q4_K_XL.gguf",
+    "resolved_model": null,
+    "llm_calls": 1,
+    "llm_seconds": 19.2,
+    "max_prompt_chars": 512,
+    "commands": [],
+    "confirmations": 0,
+    "declined": 0,
+    "errors": [],
+    "answer": "**Add a conditional check to handle empty lists in the `average` function.**\n\nThe script fails because no command-line arguments were provided, making `len(values)` equal to `0`.\n\n* **Fix in `report.py`**:\n  ```python\n  def average(values):\n      return sum(values) / len(values) if values else 0\n  ```\n* **Run with arguments**:\n  ```bash\n  python3 report.py 10 20 30\n  ```"
+  },
+  "exit_code": 0,
+  "timed_out": false,
+  "seconds": 19.5,
+  "answers_given": []
+}

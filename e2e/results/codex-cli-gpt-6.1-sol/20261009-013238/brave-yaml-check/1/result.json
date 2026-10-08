@@ -1,0 +1,49 @@
+{
+  "id": "brave-yaml-check",
+  "passed": true,
+  "checks": [
+    {
+      "check": "finished",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "no_errors",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "mode",
+      "ok": true,
+      "detail": "got brave"
+    },
+    {
+      "check": "answer_contains",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "metrics": {
+    "mode": "brave",
+    "provider": "codex-cli",
+    "model": "gpt-6.1-sol",
+    "resolved_model": null,
+    "llm_calls": 2,
+    "llm_seconds": 10.3,
+    "max_prompt_chars": 842,
+    "commands": [
+      "ls -l config.yaml && cat -n config.yaml && python3 -c 'import yaml; print(\"PyYAML available:\", yaml.__version__)'"
+    ],
+    "confirmations": 1,
+    "edited": 0,
+    "declined": 0,
+    "errors": [],
+    "answer": "`config.yaml` is **invalid YAML**. Line 4 has an extra leading space: `workers` must align with `host` and `port`.\n\nCorrected section:\n```yaml\nserver:\n  host: 0.0.0.0\n  port: 8080\n  workers: 4\n```\n\nNo files were changed."
+  },
+  "exit_code": 0,
+  "timed_out": false,
+  "seconds": 10.5,
+  "answers_given": [
+    "y"
+  ]
+}

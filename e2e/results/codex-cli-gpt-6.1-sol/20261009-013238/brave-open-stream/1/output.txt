@@ -1,0 +1,2 @@
+/tmp/seer-e2e-zobu6pet/bin/seer: 2: exec: /home/strix/Developer/seer/.venv/bin/seer: not found
+bash: line 1: printf: write error: Broken pipe

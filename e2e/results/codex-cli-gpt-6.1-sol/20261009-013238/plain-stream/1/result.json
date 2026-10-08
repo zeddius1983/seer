@@ -1,0 +1,50 @@
+{
+  "id": "plain-stream",
+  "passed": true,
+  "checks": [
+    {
+      "check": "finished",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "no_errors",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "mode",
+      "ok": true,
+      "detail": "got plain"
+    },
+    {
+      "check": "answer_contains",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "max_llm_calls",
+      "ok": true,
+      "detail": "1 calls"
+    }
+  ],
+  "metrics": {
+    "mode": "plain",
+    "provider": "codex-cli",
+    "model": "gpt-6.1-sol",
+    "resolved_model": null,
+    "llm_calls": 1,
+    "llm_seconds": 4.3,
+    "max_prompt_chars": 45,
+    "commands": [],
+    "confirmations": 0,
+    "edited": 0,
+    "declined": 0,
+    "errors": [],
+    "answer": "`git rebase` replays commits from your branch on top of another branch or commit, creating a linear history with new commit hashes. **Avoid rebasing shared commits**, since rewriting their history can disrupt collaborators."
+  },
+  "exit_code": 0,
+  "timed_out": false,
+  "seconds": 4.4,
+  "answers_given": []
+}

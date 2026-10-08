@@ -1,0 +1,9 @@
+{"event": "start", "t": 0.033, "version": "1.3.0", "argv": ["-p", "codex-cli", "-m", "gpt-6.1-sol", "-b", "create", "a", "file", "notes.txt", "containing", "the", "word", "hello"], "cwd": "/tmp/seer-e2e-9rjv40hj/project"}
+{"event": "mode", "t": 0.035, "mode": "brave", "piped_chars": 0}
+{"event": "provider", "t": 0.035, "name": "codex-cli", "type": "codex-cli", "model": "gpt-6.1-sol", "fallback_models": []}
+{"event": "llm", "t": 4.141, "system_chars": 3175, "prompt_chars": 55, "seconds": 4.1, "resolved_model": null, "reasoning_words": 0, "reply": "```run-write\nprintf 'hello\\n' > notes.txt\n```"}
+{"event": "confirm", "t": 4.145, "command": "printf 'hello\\n' > notes.txt", "final": "printf 'hello\\n' > notes.txt", "decision": "run"}
+{"event": "command", "t": 4.147, "command": "printf 'hello\\n' > notes.txt", "exit_code": 0, "asked": true, "output_chars": 0, "output": ""}
+{"event": "llm", "t": 7.743, "system_chars": 3175, "prompt_chars": 529, "seconds": 3.6, "resolved_model": null, "reasoning_words": 0, "reply": "Created `notes.txt` containing `hello`."}
+{"event": "answer", "t": 7.744, "text": "Created `notes.txt` containing `hello`."}
+{"event": "end", "t": 7.745}

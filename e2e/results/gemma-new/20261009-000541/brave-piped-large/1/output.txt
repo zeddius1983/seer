@@ -1,0 +1,7 @@
+gemma-4-26B-A4B-it-qat-UD-Q4_K_XL thinking… (4 words)
+  $ ls -F
+  gemma-4-26B-A4B-it-qat-UD-Q4_K_XL thinking… (6 words)
+  $ grep -r "ERROR" .
+  gemma-4-26B-A4B-it-qat-UD-Q4_K_XL thinking… (17 words)
+  $ grep "ERROR" logs/big.log | sed 's/.*ERROR //' | sort | uniq -c | sort -rn
+  gemma-4-26B-A4B-it-qat-UD-Q4_K_XL thinking…

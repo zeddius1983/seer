@@ -1,0 +1,19 @@
+GPT-6.1 Sol thinking… (66 words)
+    Rebase your local commits onto the remote branch, then push:
+
+     git pull --rebase origin main
+     git push origin main
+
+    Your push was rejected because origin/main contains commits missing from your
+    local branch.
+
+     • If conflicts occur, resolve them, then run:
+
+        git add <resolved-files>
+        git rebase --continue
+
+     • To cancel the rebase:
+
+        git rebase --abort
+
+    Avoid force-pushing—it could overwrite others’ commits.

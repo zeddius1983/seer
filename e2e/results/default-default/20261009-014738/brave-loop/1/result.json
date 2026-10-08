@@ -1,0 +1,47 @@
+{
+  "id": "brave-loop",
+  "passed": false,
+  "checks": [
+    {
+      "check": "finished",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "no_errors",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "mode",
+      "ok": true,
+      "detail": "got brave"
+    },
+    {
+      "check": "confirmations",
+      "ok": false,
+      "detail": "1 prompts"
+    }
+  ],
+  "metrics": {
+    "mode": "brave",
+    "provider": "vllm",
+    "model": "/home/strix/.lmstudio/models/unsloth/gemma-4-26B-A4B-it-qat-GGUF/gemma-4-26B-A4B-it-qat-UD-Q4_K_XL.gguf",
+    "resolved_model": null,
+    "llm_calls": 2,
+    "llm_seconds": 20.6,
+    "max_prompt_chars": 539,
+    "commands": [],
+    "confirmations": 1,
+    "edited": 0,
+    "declined": 1,
+    "errors": [],
+    "answer": "You declined the command to list the line counts and first lines of Python files in `src`. Here is the command you can run yourself:\n\n```bash\nfind src -name \"*.py\" -exec awk 'NR==1 {first=$0} END {printf \"%d lines | %s | %s\\n\", NR, FILENAME, first}' {} \\;\n```"
+  },
+  "exit_code": 0,
+  "timed_out": false,
+  "seconds": 20.8,
+  "answers_given": [
+    "n"
+  ]
+}

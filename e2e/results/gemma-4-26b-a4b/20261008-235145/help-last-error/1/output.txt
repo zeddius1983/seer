@@ -1,0 +1,26 @@
+gemma-4-26B-A4B-it-qat-UD-Q4_K_XL thinking… (101 words)
+    Your local main branch is behind the remote main branch, meaning there are
+    commits on GitHub that you do not have locally.
+
+    Run git pull origin main to integrate remote changes before pushing.
+
+    Recommended Fix
+
+    To maintain a clean history, use rebase:
+
+     • git pull --rebase origin main
+     • git push origin main
+
+    Standard Fix
+
+    If you prefer a merge commit:
+
+     • git pull origin main
+     • git push origin main
+
+    Destructive Fix
+
+    Only use this if you want to overwrite the remote repository with your local
+    state, effectively deleting remote commits:
+
+     • git push origin main --force

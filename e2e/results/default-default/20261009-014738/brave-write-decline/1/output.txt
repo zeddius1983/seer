@@ -1,0 +1,13 @@
+gemma-4-26B-A4B-it-qat-UD-Q4_K_XL thinking… (5 words)
+  $ ls -R logs
+  gemma-4-26B-A4B-it-qat-UD-Q4_K_XL thinking… (4 words)
+    ╭────────────────────────────────────────────────────────────────────────────╮
+    │ rm logs/*.log                                                              │
+    ╰────────────────────────────────────────────────────────────────────────────╯
+Run this command? [Y/n/e] [y]: n
+  gemma-4-26B-A4B-it-qat-UD-Q4_K_XL thinking… (21 words)
+
+    You declined to delete the log files in the logs directory. You can do so by
+    running:
+
+     rm logs/*.log

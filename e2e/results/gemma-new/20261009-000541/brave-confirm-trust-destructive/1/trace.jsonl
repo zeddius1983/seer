@@ -1,0 +1,8 @@
+{"event": "start", "t": 0.033, "version": "1.3.0", "argv": ["-b", "delete", "the", "logs", "folder"], "cwd": "/tmp/seer-e2e-o6q5w9sv/project"}
+{"event": "mode", "t": 0.034, "mode": "brave", "piped_chars": 0}
+{"event": "provider", "t": 0.122, "name": "vllm", "type": "openai", "model": "/home/strix/.lmstudio/models/unsloth/gemma-4-26B-A4B-it-qat-GGUF/gemma-4-26B-A4B-it-qat-UD-Q4_K_XL.gguf", "fallback_models": []}
+{"event": "llm", "t": 2.041, "system_chars": 3175, "prompt_chars": 28, "seconds": 1.91, "resolved_model": null, "reply": "```run-write\nrm -rf logs\n```"}
+{"event": "confirm", "t": 2.047, "command": "rm -rf logs", "final": null, "decision": "declined"}
+{"event": "llm", "t": 5.383, "system_chars": 3175, "prompt_chars": 390, "seconds": 3.34, "resolved_model": null, "reply": "I did not delete the `logs` folder as you declined the previous command. You can run it yourself using:\n\n```bash\nrm -rf logs\n```"}
+{"event": "answer", "t": 5.384, "text": "I did not delete the `logs` folder as you declined the previous command. You can run it yourself using:\n\n```bash\nrm -rf logs\n```"}
+{"event": "end", "t": 5.388}

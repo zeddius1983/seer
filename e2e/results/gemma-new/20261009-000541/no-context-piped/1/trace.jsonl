@@ -1,0 +1,6 @@
+{"event": "start", "t": 0.032, "version": "1.3.0", "argv": ["--no-context", "why", "does", "this", "fail"], "cwd": "/tmp/seer-e2e-08gma9gt/project"}
+{"event": "mode", "t": 0.033, "mode": "plain", "context_chars": 0}
+{"event": "provider", "t": 0.126, "name": "vllm", "type": "openai", "model": "/home/strix/.lmstudio/models/unsloth/gemma-4-26B-A4B-it-qat-GGUF/gemma-4-26B-A4B-it-qat-UD-Q4_K_XL.gguf", "fallback_models": []}
+{"event": "llm", "t": 5.854, "system_chars": 1086, "prompt_chars": 18, "seconds": 5.73, "resolved_model": null, "reply": "**Please provide the command output or error message** you are encountering so I can analyze the failure."}
+{"event": "answer", "t": 5.856, "text": "**Please provide the command output or error message** you are encountering so I can analyze the failure."}
+{"event": "end", "t": 5.856}

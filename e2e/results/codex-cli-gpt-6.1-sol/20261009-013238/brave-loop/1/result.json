@@ -1,0 +1,47 @@
+{
+  "id": "brave-loop",
+  "passed": false,
+  "checks": [
+    {
+      "check": "finished",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "no_errors",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "mode",
+      "ok": true,
+      "detail": "got brave"
+    },
+    {
+      "check": "confirmations",
+      "ok": false,
+      "detail": "1 prompts"
+    }
+  ],
+  "metrics": {
+    "mode": "brave",
+    "provider": "codex-cli",
+    "model": "gpt-6.1-sol",
+    "resolved_model": null,
+    "llm_calls": 2,
+    "llm_seconds": 10.3,
+    "max_prompt_chars": 589,
+    "commands": [],
+    "confirmations": 1,
+    "edited": 0,
+    "declined": 1,
+    "errors": [],
+    "answer": "You declined the command, so your Python files’ line counts and first lines were not collected. You can run it yourself:\n\n```bash\nfind src -type f -name '*.py' -print0 | sort -z | while IFS= read -r -d '' file; do printf '%s | %s lines | ' \"$file\" \"$(wc -l < \"$file\")\"; head -n 1 \"$file\"; done\n```"
+  },
+  "exit_code": 0,
+  "timed_out": false,
+  "seconds": 10.5,
+  "answers_given": [
+    "n"
+  ]
+}

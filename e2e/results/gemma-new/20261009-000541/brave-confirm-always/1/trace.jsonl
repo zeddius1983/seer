@@ -1,0 +1,12 @@
+{"event": "start", "t": 0.027, "version": "1.3.0", "argv": ["-b", "list", "the", "3", "largest", "files", "here"], "cwd": "/tmp/seer-e2e-msdt_9t8/project"}
+{"event": "mode", "t": 0.028, "mode": "brave", "piped_chars": 0}
+{"event": "provider", "t": 0.096, "name": "vllm", "type": "openai", "model": "/home/strix/.lmstudio/models/unsloth/gemma-4-26B-A4B-it-qat-GGUF/gemma-4-26B-A4B-it-qat-UD-Q4_K_XL.gguf", "fallback_models": []}
+{"event": "llm", "t": 12.097, "system_chars": 3175, "prompt_chars": 35, "seconds": 12.0, "resolved_model": null, "reply": "```run\ndu -ah . | sort -rh | head -n 3\n```"}
+{"event": "confirm", "t": 12.103, "command": "du -ah . | sort -rh | head -n 3", "final": "du -ah . | sort -rh | head -n 3", "decision": "run"}
+{"event": "command", "t": 12.106, "command": "du -ah . | sort -rh | head -n 3", "exit_code": 0, "asked": true, "output_chars": 42, "output": "2,7M\t.\n2,2M\t./data\n2,0M\t./data/archive.gz"}
+{"event": "llm", "t": 20.964, "system_chars": 3175, "prompt_chars": 554, "seconds": 8.86, "resolved_model": null, "reply": "```run\nfind . -type f -exec du -h {} + | sort -rh | head -n 3\n```"}
+{"event": "confirm", "t": 20.966, "command": "find . -type f -exec du -h {} + | sort -rh | head -n 3", "final": "find . -type f -exec du -h {} + | sort -rh | head -n 3", "decision": "run"}
+{"event": "command", "t": 20.971, "command": "find . -type f -exec du -h {} + | sort -rh | head -n 3", "exit_code": 0, "asked": true, "output_chars": 66, "output": "2,0M\t./data/archive.gz\n292K\t./data/sample.csv\n148K\t./logs/big.log"}
+{"event": "llm", "t": 26.71, "system_chars": 3175, "prompt_chars": 712, "seconds": 5.74, "resolved_model": null, "reply": "1. `2,0M ./data/archive.gz`\n2. `292K ./data/sample.csv`\n3. `148K ./logs/big.log`"}
+{"event": "answer", "t": 26.711, "text": "1. `2,0M ./data/archive.gz`\n2. `292K ./data/sample.csv`\n3. `148K ./logs/big.log`"}
+{"event": "end", "t": 26.712}

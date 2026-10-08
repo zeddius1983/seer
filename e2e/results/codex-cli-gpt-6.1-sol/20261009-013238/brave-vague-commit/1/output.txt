@@ -1,0 +1,16 @@
+GPT-6.1 Sol thinking… (9 words)
+  $ git log --all --format='%h %s' --grep='wip' -i
+  GPT-6.1 Sol thinking… (12 words)
+  $ git show --stat 0261cfa && git show --format=fuller --no-ext-diff 0261cfa
+  GPT-6.1 Sol thinking… (67 words)
+
+    Commit 0261cfa (wip) added two files, totaling 16 lines:
+
+     • src/retry.py: A retry() helper that calls a function up to 3 times by
+       default. It retries only ConnectionError, waiting 0.5 seconds, then 1
+       second; the final failure is re-raised. Other exceptions propagate
+       immediately.
+     • tests/test_retry.py: One test verifying that an immediately successful call
+       returns its value (42).
+
+    It added no tests for retries, delays, or failure handling.

@@ -1,0 +1,50 @@
+{
+  "id": "brave-open-stream",
+  "passed": true,
+  "checks": [
+    {
+      "check": "finished",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "no_errors",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "mode",
+      "ok": true,
+      "detail": "got watch"
+    },
+    {
+      "check": "max_commands",
+      "ok": true,
+      "detail": "0 commands"
+    },
+    {
+      "check": "answer_contains",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "metrics": {
+    "mode": "watch",
+    "provider": "vllm",
+    "model": "/home/strix/.lmstudio/models/unsloth/gemma-4-26B-A4B-it-qat-GGUF/gemma-4-26B-A4B-it-qat-UD-Q4_K_XL.gguf",
+    "resolved_model": null,
+    "llm_calls": 2,
+    "llm_seconds": 5.2,
+    "max_prompt_chars": 65,
+    "commands": [],
+    "confirmations": 0,
+    "edited": 0,
+    "declined": 0,
+    "errors": [],
+    "answer": "ERROR: Disk usage is above 90%.\n\n**ERROR:** Disk usage is above 95%."
+  },
+  "exit_code": 0,
+  "timed_out": false,
+  "seconds": 7.1,
+  "answers_given": []
+}

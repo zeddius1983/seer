@@ -1,0 +1,50 @@
+{
+  "id": "help-last-error",
+  "passed": true,
+  "checks": [
+    {
+      "check": "finished",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "no_errors",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "mode",
+      "ok": true,
+      "detail": "got help"
+    },
+    {
+      "check": "answer_contains",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "max_llm_calls",
+      "ok": true,
+      "detail": "1 calls"
+    }
+  ],
+  "metrics": {
+    "mode": "help",
+    "provider": "codex-cli",
+    "model": "gpt-6.1-sol",
+    "resolved_model": null,
+    "llm_calls": 1,
+    "llm_seconds": 5.3,
+    "max_prompt_chars": 509,
+    "commands": [],
+    "confirmations": 0,
+    "edited": 0,
+    "declined": 0,
+    "errors": [],
+    "answer": "**Rebase your local commits onto the remote branch, then push:**\n\n```bash\ngit pull --rebase origin main\ngit push origin main\n```\n\nYour push was rejected because `origin/main` contains commits missing from your local branch.\n\n- If conflicts occur, resolve them, then run:\n  ```bash\n  git add <resolved-files>\n  git rebase --continue\n  ```\n- To cancel the rebase:\n  ```bash\n  git rebase --abort\n  ```\n\nAvoid force-pushing—it could overwrite others’ commits."
+  },
+  "exit_code": 0,
+  "timed_out": false,
+  "seconds": 5.4,
+  "answers_given": []
+}

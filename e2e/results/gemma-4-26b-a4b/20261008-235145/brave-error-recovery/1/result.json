@@ -1,0 +1,53 @@
+{
+  "id": "brave-error-recovery",
+  "passed": true,
+  "checks": [
+    {
+      "check": "finished",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "no_errors",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "mode",
+      "ok": true,
+      "detail": "got brave"
+    },
+    {
+      "check": "answer_contains",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "max_commands",
+      "ok": true,
+      "detail": "3 commands"
+    }
+  ],
+  "metrics": {
+    "mode": "brave",
+    "provider": "vllm",
+    "model": "/home/strix/.lmstudio/models/unsloth/gemma-4-26B-A4B-it-qat-GGUF/gemma-4-26B-A4B-it-qat-UD-Q4_K_XL.gguf",
+    "resolved_model": null,
+    "llm_calls": 4,
+    "llm_seconds": 17.7,
+    "max_prompt_chars": 991,
+    "commands": [
+      "ls config.yml",
+      "ls -R",
+      "cat config.yaml"
+    ],
+    "confirmations": 0,
+    "declined": 0,
+    "errors": [],
+    "answer": "```yaml\nserver:\n  host: 0.0.0.0\n  port: 8080\n   workers: 4\ndatabase:\n  url: postgres://localhost/app\n```\n(Note: The file is named `config.yaml`)"
+  },
+  "exit_code": 0,
+  "timed_out": false,
+  "seconds": 17.9,
+  "answers_given": []
+}

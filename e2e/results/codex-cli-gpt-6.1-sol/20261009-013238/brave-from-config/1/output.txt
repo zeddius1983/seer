@@ -1,0 +1,1 @@
+/tmp/seer-e2e-cwy_xes8/bin/seer: 2: exec: /home/strix/Developer/seer/.venv/bin/seer: not found

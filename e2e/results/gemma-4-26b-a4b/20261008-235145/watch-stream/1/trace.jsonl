@@ -1,0 +1,9 @@
+{"event": "start", "t": 0.032, "version": "1.3.0", "argv": ["watch", "for", "database", "problems"], "cwd": "/tmp/seer-e2e-70xn_loq/project"}
+{"event": "mode", "t": 1.036, "mode": "watch"}
+{"event": "provider", "t": 1.134, "name": "vllm", "type": "openai", "model": "/home/strix/.lmstudio/models/unsloth/gemma-4-26B-A4B-it-qat-GGUF/gemma-4-26B-A4B-it-qat-UD-Q4_K_XL.gguf", "fallback_models": []}
+{"event": "llm", "t": 5.461, "system_chars": 436, "prompt_chars": 114, "seconds": 4.33, "resolved_model": null, "reply": "**ERROR:** Database connection timeout immediately following service start."}
+{"event": "answer", "t": 5.463, "text": "**ERROR:** Database connection timeout immediately following service start."}
+{"event": "provider", "t": 18.981, "name": "vllm", "type": "openai", "model": "/home/strix/.lmstudio/models/unsloth/gemma-4-26B-A4B-it-qat-GGUF/gemma-4-26B-A4B-it-qat-UD-Q4_K_XL.gguf", "fallback_models": []}
+{"event": "llm", "t": 24.781, "system_chars": 436, "prompt_chars": 162, "seconds": 5.8, "resolved_model": null, "reply": "**ERROR:** Database connection timeout at 10:00:05, followed by a retry attempt; service appears to have recovered by 10:00:30."}
+{"event": "answer", "t": 24.782, "text": "**ERROR:** Database connection timeout at 10:00:05, followed by a retry attempt; service appears to have recovered by 10:00:30."}
+{"event": "end", "t": 24.782}

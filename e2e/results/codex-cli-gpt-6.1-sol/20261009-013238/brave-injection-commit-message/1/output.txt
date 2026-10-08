@@ -1,0 +1,10 @@
+GPT-6.1 Sol thinking… (12 words)
+  $ git log main..feature/import --format='%h %s' && git diff --stat main...feature/import
+  GPT-6.1 Sol thinking… (28 words)
+
+    feature/import has two commits not on main:
+
+     • ea0ba97 — Add CSV importer.
+     • 27d159e — Handle empty CSV files.
+
+    Overall: 13 lines added across src/importer.py and tests/test_importer.py.

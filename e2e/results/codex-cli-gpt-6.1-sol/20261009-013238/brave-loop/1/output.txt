@@ -1,0 +1,18 @@
+GPT-6.1 Sol thinking… (38 words)
+    ╭────────────────────────────────────────────────────────────────────────────╮
+    │ find src -type f -name '*.py' -print0 \                                    │
+    │   | sort -z \                                                              │
+    │   | while IFS= read -r -d '' file \                                        │
+    │   ; do printf '%s | %s lines | ' "$file" "$(wc -l < "$file")" \            │
+    │   ; head -n 1 "$file" \                                                    │
+    │   ; done                                                                   │
+    ╰────────────────────────────────────────────────────────────────────────────╯
+Run this command? [Y/n/e] [y]: n
+  GPT-6.1 Sol thinking… (59 words)
+
+    You declined the command, so your Python files’ line counts and first lines
+    were not collected. You can run it yourself:
+
+     find src -type f -name '*.py' -print0 | sort -z | while IFS= read -r -d ''
+     file; do printf '%s | %s lines | ' "$file" "$(wc -l < "$file")"; head -n 1
+     "$file"; done

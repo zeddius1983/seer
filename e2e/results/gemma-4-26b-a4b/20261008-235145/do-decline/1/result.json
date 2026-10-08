@@ -1,0 +1,56 @@
+{
+  "id": "do-decline",
+  "passed": true,
+  "checks": [
+    {
+      "check": "finished",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "no_errors",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "mode",
+      "ok": true,
+      "detail": "got do"
+    },
+    {
+      "check": "confirmations",
+      "ok": true,
+      "detail": "1 prompts"
+    },
+    {
+      "check": "max_commands",
+      "ok": true,
+      "detail": "0 commands"
+    },
+    {
+      "check": "files_exist",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "metrics": {
+    "mode": "do",
+    "provider": "vllm",
+    "model": "/home/strix/.lmstudio/models/unsloth/gemma-4-26B-A4B-it-qat-GGUF/gemma-4-26B-A4B-it-qat-UD-Q4_K_XL.gguf",
+    "resolved_model": null,
+    "llm_calls": 1,
+    "llm_seconds": 25.4,
+    "max_prompt_chars": 32,
+    "commands": [],
+    "confirmations": 1,
+    "declined": 1,
+    "errors": [],
+    "answer": "This command will recursively find and delete all files ending in .log within the logs directory.\n\n```bash\nfind logs -type f -name \"*.log\" -delete\n```"
+  },
+  "exit_code": 0,
+  "timed_out": false,
+  "seconds": 25.6,
+  "answers_given": [
+    "n"
+  ]
+}

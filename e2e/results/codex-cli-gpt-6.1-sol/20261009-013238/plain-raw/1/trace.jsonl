@@ -1,0 +1,6 @@
+{"event": "start", "t": 0.033, "version": "1.3.0", "argv": ["-p", "codex-cli", "-m", "gpt-6.1-sol", "-r", "give", "one", "command", "that", "counts", "the", "lines", "in", "a", "file"], "cwd": "/tmp/seer-e2e-nibcf358/project"}
+{"event": "mode", "t": 0.035, "mode": "plain", "context_chars": 0}
+{"event": "provider", "t": 0.036, "name": "codex-cli", "type": "codex-cli", "model": "gpt-6.1-sol", "fallback_models": []}
+{"event": "llm", "t": 3.471, "system_chars": 1086, "prompt_chars": 48, "seconds": 3.43, "resolved_model": null, "reasoning_words": 0, "reply": "```bash\nwc -l filename\n```"}
+{"event": "answer", "t": 3.471, "text": "```bash\nwc -l filename\n```"}
+{"event": "end", "t": 3.471}

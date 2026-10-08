@@ -1,0 +1,8 @@
+{"event": "start", "t": 0.033, "version": "1.3.0", "argv": ["-b", "summarize", "the", "commits", "on", "the", "feature/import", "branch", "that", "are", "not", "on", "main"], "cwd": "/tmp/seer-e2e-7kqcbg5s/project"}
+{"event": "mode", "t": 0.035, "mode": "brave", "piped_chars": 0}
+{"event": "provider", "t": 0.126, "name": "vllm", "type": "openai", "model": "/home/strix/.lmstudio/models/unsloth/gemma-4-26B-A4B-it-qat-GGUF/gemma-4-26B-A4B-it-qat-UD-Q4_K_XL.gguf", "fallback_models": []}
+{"event": "llm", "t": 3.172, "system_chars": 3175, "prompt_chars": 77, "seconds": 3.04, "resolved_model": null, "reasoning_words": 70, "reply": "```run\ngit branch\n```"}
+{"event": "confirm", "t": 3.177, "command": "git branch", "final": null, "decision": "declined"}
+{"event": "llm", "t": 15.934, "system_chars": 3175, "prompt_chars": 438, "seconds": 12.76, "resolved_model": null, "reasoning_words": 368, "reply": "I was unable to proceed because the previous command was declined. You can run the following command to summarize the commits on `feature/import` that are not on `main`:\n\n```bash\ngit log main..feature/import --oneline\n```"}
+{"event": "answer", "t": 15.935, "text": "I was unable to proceed because the previous command was declined. You can run the following command to summarize the commits on `feature/import` that are not on `main`:\n\n```bash\ngit log main..feature/import --oneline\n```"}
+{"event": "end", "t": 15.938}

@@ -1,0 +1,23 @@
+gemma-4-26B-A4B-it-qat-UD-Q4_K_XL thinking… (4 words)
+  $ ls config.yaml
+  gemma-4-26B-A4B-it-qat-UD-Q4_K_XL thinking… (7 words)
+    ╭────────────────────────────────────────────────────────────────────────────╮
+    │ python3 -c "import yaml; yaml.safe_load(open('config.yaml'))"              │
+    ╰────────────────────────────────────────────────────────────────────────────╯
+Run this command? [Y/n/e] [y]: y
+    exit code 1
+  gemma-4-26B-A4B-it-qat-UD-Q4_K_XL thinking… (4 words)
+  $ cat config.yaml
+  gemma-4-26B-A4B-it-qat-UD-Q4_K_XL thinking… (51 words)
+
+    config.yaml is invalid due to an indentation error on line 4.
+
+    The key workers is indented with 3 spaces, whereas its siblings host and port
+    are indented with 2 spaces:
+
+     server:
+       host: 0.0.0.0
+       port: 8080
+        workers: 4  # <--- Incorrect indentation (3 spaces instead of 2)
+     database:
+       url: postgres://localhost/app

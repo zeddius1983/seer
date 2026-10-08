@@ -1,0 +1,10 @@
+gemma-4-26B-A4B-it-qat-UD-Q4_K_XL thinking… (6 words)
+    ╭────────────────────────────────────────────────────────────────────────────╮
+    │ echo hello > notes.txt                                                     │
+    ╰────────────────────────────────────────────────────────────────────────────╯
+Run this command? [Y/n/e] [y]: y
+  gemma-4-26B-A4B-it-qat-UD-Q4_K_XL thinking… (4 words)
+  $ cat notes.txt
+  gemma-4-26B-A4B-it-qat-UD-Q4_K_XL thinking… (4 words)
+
+    Created notes.txt containing hello.

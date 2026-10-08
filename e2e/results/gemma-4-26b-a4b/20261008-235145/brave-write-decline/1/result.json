@@ -1,0 +1,53 @@
+{
+  "id": "brave-write-decline",
+  "passed": true,
+  "checks": [
+    {
+      "check": "finished",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "no_errors",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "check": "mode",
+      "ok": true,
+      "detail": "got brave"
+    },
+    {
+      "check": "confirmations",
+      "ok": true,
+      "detail": "1 prompts"
+    },
+    {
+      "check": "files_exist",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "metrics": {
+    "mode": "brave",
+    "provider": "vllm",
+    "model": "/home/strix/.lmstudio/models/unsloth/gemma-4-26B-A4B-it-qat-GGUF/gemma-4-26B-A4B-it-qat-UD-Q4_K_XL.gguf",
+    "resolved_model": null,
+    "llm_calls": 3,
+    "llm_seconds": 9.0,
+    "max_prompt_chars": 519,
+    "commands": [
+      "ls -R logs"
+    ],
+    "confirmations": 1,
+    "declined": 1,
+    "errors": [],
+    "answer": "You declined to run the command to delete the log files. You can run it yourself using:\n\n```bash\nrm logs/*.log\n```"
+  },
+  "exit_code": 0,
+  "timed_out": false,
+  "seconds": 9.2,
+  "answers_given": [
+    "n"
+  ]
+}

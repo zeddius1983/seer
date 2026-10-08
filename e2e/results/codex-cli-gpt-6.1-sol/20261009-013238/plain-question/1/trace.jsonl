@@ -1,0 +1,6 @@
+{"event": "start", "t": 0.033, "version": "1.3.0", "argv": ["-p", "codex-cli", "-m", "gpt-6.1-sol", "how", "do", "I", "find", "files", "larger", "than", "100MB"], "cwd": "/tmp/seer-e2e-wdbt5nxk/project"}
+{"event": "mode", "t": 0.035, "mode": "plain", "context_chars": 0}
+{"event": "provider", "t": 0.036, "name": "codex-cli", "type": "codex-cli", "model": "gpt-6.1-sol", "fallback_models": []}
+{"event": "llm", "t": 6.083, "system_chars": 1086, "prompt_chars": 37, "seconds": 6.05, "resolved_model": null, "reasoning_words": 0, "reply": "**Find files larger than 100 MiB** under the current directory:\n\n```bash\nfind . -type f -size +100M\n```\n\nTo search your entire system, hiding permission errors:\n\n```bash\nsudo find / -type f -size +100M 2>/dev/null\n```"}
+{"event": "answer", "t": 6.09, "text": "**Find files larger than 100 MiB** under the current directory:\n\n```bash\nfind . -type f -size +100M\n```\n\nTo search your entire system, hiding permission errors:\n\n```bash\nsudo find / -type f -size +100M 2>/dev/null\n```"}
+{"event": "end", "t": 6.09}
