@@ -14,6 +14,8 @@ def _sent_payload(provider, module, lines=()):
     sent = {}
 
     class _Resp:
+        status_code = 200
+
         def raise_for_status(self):
             pass
 
@@ -123,3 +125,79 @@ def test_anthropic_thinking_then_cap_is_a_clear_error():
     with pytest.raises(RuntimeError, match="output limit"):
         _sent_payload(provider, "anthropic", lines)
     assert provider.reasoning == "Considering"
+
+
+class _ServerSequence:
+    """httpx.Client stand-in answering successive requests from `replies`:
+    (status, body or SSE lines). Records each request's payload."""
+
+    def __init__(self, replies):
+        self.replies, self.payloads = list(replies), []
+
+    def client(self, **kwargs):
+        outer = self
+
+        class _Client:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            @contextmanager
+            def stream(self, method, url, headers, json):
+                outer.payloads.append(dict(json))
+                status, content = outer.replies.pop(0)
+
+                class _Resp:
+                    status_code = status
+
+                    def read(self):
+                        return content.encode()
+
+                    def raise_for_status(self):
+                        if status >= 400:
+                            import httpx
+                            raise httpx.HTTPStatusError(f"{status}", request=None, response=None)
+
+                    def iter_lines(self):
+                        return iter(content if isinstance(content, list) else [])
+
+                yield _Resp()
+
+        return _Client()
+
+
+_VLLM_TOO_LARGE = ('{"object": "error", "message": "This model\'s maximum context length is 8192 tokens. '
+                   'However, you requested 16100 tokens (100 in the messages, 16000 in the completion)."}')
+
+
+def test_default_cap_rejected_by_a_small_context_is_dropped():
+    server = _ServerSequence([
+        (400, _VLLM_TOO_LARGE),
+        (200, _sse({"choices": [{"delta": {"content": "Use ls"}}]})),
+        (200, _sse({"choices": [{"delta": {"content": "again"}}]})),
+    ])
+    provider = OpenAIProvider(ProviderConfig(type="openai", model="m", base_url="http://vllm:8000/v1"))
+    with patch("seer.providers.openai.httpx.Client", server.client):
+        assert list(provider.stream("S", "P")) == ["Use ls"]
+        assert list(provider.stream("S", "P2")) == ["again"]   # e.g. the next brave step
+    assert [("max_tokens" in p) for p in server.payloads] == [True, False, False]
+
+
+def test_other_bad_requests_still_fail():
+    server = _ServerSequence([(400, '{"error": "invalid model"}')])
+    provider = OpenAIProvider(ProviderConfig(type="openai", model="m", base_url="http://x/v1"))
+    import httpx
+    with patch("seer.providers.openai.httpx.Client", server.client), pytest.raises(httpx.HTTPStatusError):
+        list(provider.stream("S", "P"))
+    assert len(server.payloads) == 1
+
+
+def test_configured_cap_is_never_dropped():
+    server = _ServerSequence([(400, _VLLM_TOO_LARGE)])
+    provider = OpenAIProvider(ProviderConfig(type="openai", model="m", base_url="http://x/v1", max_tokens=12000))
+    import httpx
+    with patch("seer.providers.openai.httpx.Client", server.client), pytest.raises(httpx.HTTPStatusError):
+        list(provider.stream("S", "P"))
+    assert server.payloads[0]["max_tokens"] == 12000 and len(server.payloads) == 1
