@@ -1,6 +1,0 @@
-{"event": "start", "t": 0.037, "version": "1.3.0", "argv": ["-p", "codex-cli", "-m", "gpt-6.1-sol", "-s", "explain", "what", "git", "rebase", "does", "in", "two", "sentences"], "cwd": "/tmp/seer-e2e-42bcscly/project"}
-{"event": "mode", "t": 0.038, "mode": "plain", "context_chars": 0}
-{"event": "provider", "t": 0.04, "name": "codex-cli", "type": "codex-cli", "model": "gpt-6.1-sol", "fallback_models": []}
-{"event": "llm", "t": 4.333, "system_chars": 1086, "prompt_chars": 45, "seconds": 4.29, "resolved_model": null, "reasoning_words": 0, "reply": "`git rebase` replays commits from your branch on top of another branch or commit, creating a linear history with new commit hashes. **Avoid rebasing shared commits**, since rewriting their history can disrupt collaborators."}
-{"event": "answer", "t": 4.335, "text": "`git rebase` replays commits from your branch on top of another branch or commit, creating a linear history with new commit hashes. **Avoid rebasing shared commits**, since rewriting their history can disrupt collaborators."}
-{"event": "end", "t": 4.335}

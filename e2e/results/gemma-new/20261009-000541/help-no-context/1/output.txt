@@ -1,5 +1,0 @@
-No terminal context found. Source the seer shell integration or run inside tmux.
-Tip: pipe output directly with cmd 2>&1 | seer
-
-  gemma-4-26B-A4B-it-qat-UD-Q4_K_XL thinking… (7 words)
-    No terminal context was provided to analyze.

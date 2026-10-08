@@ -1,7 +1,0 @@
-GPT-6.1 Sol thinking… (21 words)
-    This deletes all files ending in .log under logs, including its
-    subdirectories.
-    ╭────────────────────────────────────────────────────────────────────────────╮
-    │ find logs -type f -name '*.log' -delete                                    │
-    ╰────────────────────────────────────────────────────────────────────────────╯
-Run this command? [Y/n/e] [y]: n

@@ -1,6 +1,0 @@
-{"event": "start", "t": 0.029, "version": "1.3.0", "argv": ["-s", "explain", "what", "git", "rebase", "does", "in", "two", "sentences"], "cwd": "/tmp/seer-e2e-94qdul8j/project"}
-{"event": "mode", "t": 0.031, "mode": "plain", "context_chars": 0}
-{"event": "provider", "t": 0.099, "name": "vllm", "type": "openai", "model": "/home/strix/.lmstudio/models/unsloth/gemma-4-26B-A4B-it-qat-GGUF/gemma-4-26B-A4B-it-qat-UD-Q4_K_XL.gguf", "fallback_models": []}
-{"event": "llm", "t": 6.303, "system_chars": 1086, "prompt_chars": 45, "seconds": 6.2, "resolved_model": null, "reply": "`git rebase` **rewrites commit history** by moving a sequence of commits to a new base commit. This integrates changes from one branch into another by reapplying local commits one by one on top of the target branch's tip."}
-{"event": "answer", "t": 6.304, "text": "`git rebase` **rewrites commit history** by moving a sequence of commits to a new base commit. This integrates changes from one branch into another by reapplying local commits one by one on top of the target branch's tip."}
-{"event": "end", "t": 6.305}

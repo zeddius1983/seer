@@ -1,7 +1,0 @@
-gemma-4-26B-A4B-it-qat-UD-Q4_K_XL thinking… (25 words)
-    This command will recursively find and delete all files ending in .log within
-    the logs directory.
-    ╭────────────────────────────────────────────────────────────────────────────╮
-    │ find logs -type f -name "*.log" -delete                                    │
-    ╰────────────────────────────────────────────────────────────────────────────╯
-Run this command? [Y/n/e] [y]: n

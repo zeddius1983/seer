@@ -1,8 +1,0 @@
-gemma-4-26B-A4B-it-qat-UD-Q4_K_XL thinking… (5 words)
-  $ ls -l logs/big.log
-  gemma-4-26B-A4B-it-qat-UD-Q4_K_XL thinking… (4 words)
-    ╭────────────────────────────────────────────────────────────────────────────╮
-    │ rm logs/big.log                                                            │
-    ╰────────────────────────────────────────────────────────────────────────────╯
-Run this command? [Y/n/e] [y]: ^C
-Brave mode interrupted.

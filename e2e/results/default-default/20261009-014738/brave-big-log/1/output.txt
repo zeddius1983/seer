@@ -1,9 +1,0 @@
-gemma-4-26B-A4B-it-qat-UD-Q4_K_XL thinking… (9 words)
-  $ grep "ERROR" logs/big.log | head -n 5
-  gemma-4-26B-A4B-it-qat-UD-Q4_K_XL thinking… (26 words)
-  $ grep -c "ERROR" logs/big.log && grep "ERROR" logs/big.log | sed 's/.*ERROR //' | sort | uniq -c
-| sort -rn | head -n 1
-  gemma-4-26B-A4B-it-qat-UD-Q4_K_XL thinking… (19 words)
-
-    There are 137 ERROR lines in logs/big.log, and the most common error message
-    is "database connection timeout" (85 occurrences).

@@ -1,2 +1,0 @@
-/tmp/seer-e2e-v4tsakfc/bin/seer: 2: exec: /home/strix/Developer/seer/.venv/bin/seer: not found
-cat: write error: Broken pipe

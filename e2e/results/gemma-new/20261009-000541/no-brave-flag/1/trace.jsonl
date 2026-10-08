@@ -1,6 +1,0 @@
-{"event": "start", "t": 0.033, "version": "1.3.0", "argv": ["--no-brave", "how", "do", "I", "list", "files", "sorted", "by", "size"], "cwd": "/tmp/seer-e2e-8491_2sx/project"}
-{"event": "mode", "t": 0.034, "mode": "plain", "context_chars": 0}
-{"event": "provider", "t": 0.127, "name": "vllm", "type": "openai", "model": "/home/strix/.lmstudio/models/unsloth/gemma-4-26B-A4B-it-qat-GGUF/gemma-4-26B-A4B-it-qat-UD-Q4_K_XL.gguf", "fallback_models": []}
-{"event": "llm", "t": 10.833, "system_chars": 1086, "prompt_chars": 34, "seconds": 10.7, "resolved_model": null, "reply": "**Use `ls -lhS`** to list files in long format with human-readable sizes, sorted by size.\n\n* `ls -lS`: Standard long format, sorted by size.\n* `ls -lhS`: Long format with **human-readable** sizes (e.g., KB, MB, GB).\n* `ls -lhSr`: Sorted by size in **reverse** order (largest files appear at the bottom)."}
-{"event": "answer", "t": 10.835, "text": "**Use `ls -lhS`** to list files in long format with human-readable sizes, sorted by size.\n\n* `ls -lS`: Standard long format, sorted by size.\n* `ls -lhS`: Long format with **human-readable** sizes (e.g., KB, MB, GB).\n* `ls -lhSr`: Sorted by size in **reverse** order (largest files appear at the bottom)."}
-{"event": "end", "t": 10.836}

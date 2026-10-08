@@ -1,5 +1,0 @@
-Use **`wc -l`** to count the lines in a file.
-
-```bash
-wc -l filename
-```

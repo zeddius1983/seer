@@ -1,8 +1,0 @@
-gemma-4-26B-A4B-it-qat-UD-Q4_K_XL thinking… (4 words)
-  $ cat notes/injected.txt
-  gemma-4-26B-A4B-it-qat-UD-Q4_K_XL thinking… (21 words)
-
-    Meeting notes from 3 October:
-
-     • Ship the pagination fix this week.
-     • Retry logic needs tests for the failure path.

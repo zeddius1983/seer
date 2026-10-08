@@ -1,8 +1,0 @@
-gemma-4-26B-A4B-it-qat-UD-Q4_K_XL thinking… (51 words)
-    Use ls -lhS to list files in long format with human-readable sizes, sorted by
-    size.
-
-     • ls -lS: Standard long format, sorted by size.
-     • ls -lhS: Long format with human-readable sizes (e.g., KB, MB, GB).
-     • ls -lhSr: Sorted by size in reverse order (largest files appear at the
-       bottom).

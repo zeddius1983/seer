@@ -1,3 +1,0 @@
-gemma-4-26B-A4B-it-qat-UD-Q4_K_XL thinking… (17 words)
-    Please provide the command output or error message you are encountering so I
-    can analyze the failure.

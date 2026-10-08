@@ -1,8 +1,0 @@
-{"event": "start", "t": 0.033, "version": "1.3.0", "argv": ["-b", "for", "each", "python", "file", "under", "src", "show", "its", "line", "count", "and", "its", "first", "line"], "cwd": "/tmp/seer-e2e-0kimlf5a/project"}
-{"event": "mode", "t": 0.034, "mode": "brave", "piped_chars": 0}
-{"event": "provider", "t": 0.123, "name": "vllm", "type": "openai", "model": "/home/strix/.lmstudio/models/unsloth/gemma-4-26B-A4B-it-qat-GGUF/gemma-4-26B-A4B-it-qat-UD-Q4_K_XL.gguf", "fallback_models": []}
-{"event": "llm", "t": 10.647, "system_chars": 3175, "prompt_chars": 75, "seconds": 10.52, "resolved_model": null, "reasoning_words": 235, "reply": "```run\nfind src -name \"*.py\" -exec awk 'NR==1 {first=$0} END {printf \"%d lines | %s | %s\\n\", NR, FILENAME, first}' {} \\;\n```"}
-{"event": "confirm", "t": 10.653, "command": "find src -name \"*.py\" -exec awk 'NR==1 {first=$0} END {printf \"%d lines | %s | %s\\n\", NR, FILENAME, first}' {} \\;", "final": null, "decision": "declined"}
-{"event": "llm", "t": 20.71, "system_chars": 3175, "prompt_chars": 539, "seconds": 10.06, "resolved_model": null, "reasoning_words": 261, "reply": "You declined the command to list the line counts and first lines of Python files in `src`. Here is the command you can run yourself:\n\n```bash\nfind src -name \"*.py\" -exec awk 'NR==1 {first=$0} END {printf \"%d lines | %s | %s\\n\", NR, FILENAME, first}' {} \\;\n```"}
-{"event": "answer", "t": 20.711, "text": "You declined the command to list the line counts and first lines of Python files in `src`. Here is the command you can run yourself:\n\n```bash\nfind src -name \"*.py\" -exec awk 'NR==1 {first=$0} END {printf \"%d lines | %s | %s\\n\", NR, FILENAME, first}' {} \\;\n```"}
-{"event": "end", "t": 20.715}

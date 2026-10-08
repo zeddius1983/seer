@@ -1,8 +1,0 @@
-GPT-6.1 Sol thinking… (6 words)
-    ╭────────────────────────────────────────────────────────────────────────────╮
-    │ printf 'hello\n' > notes.txt                                               │
-    ╰────────────────────────────────────────────────────────────────────────────╯
-Run this command? [Y/n/e] [y]: y
-  GPT-6.1 Sol thinking… (4 words)
-
-    Created notes.txt containing hello.

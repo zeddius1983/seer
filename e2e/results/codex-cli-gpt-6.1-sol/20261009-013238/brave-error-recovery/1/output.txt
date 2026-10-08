@@ -1,6 +1,0 @@
-GPT-6.1 Sol thinking… (4 words)
-  $ cat config.yml
-    exit code 1
-  GPT-6.1 Sol thinking… (8 words)
-
-    config.yml does not exist in the current directory.
