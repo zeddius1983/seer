@@ -110,18 +110,74 @@ def test_screen_text_drops_redrawn_status_lines():
 
 
 def test_pty_answers_prompts_in_order_then_no(tmp_path):
+    # Like seer: [Y/n/e], and after e an inline editor pre-filled with the command.
     script = (
-        "for i in 1 2 3; do read -p 'Run this command? [Y/n/e] ' a; echo \"got:$a\"; done;"
+        "read -p 'Run this command? [Y/n/e] ' a; echo \"got:$a\";"
+        " read -p 'Run this command? [Y/n/e] ' a; echo \"got:$a\";"
+        " read -e -i 'rm -rf x' -p '$ ' c; echo \"edited:$c\";"
+        " read -p 'Run this command? [Y/n/e] ' a; echo \"got:$a\";"
         " [ -t 0 ] && echo tty"
     )
-    raw, exit_code, timed_out, answered = run._run_in_pty(script, tmp_path, {"PATH": "/usr/bin:/bin"}, ["y", "e"], 10)
+    raw, exit_code, timed_out, answered = run._run_in_pty(
+        script, tmp_path, {"PATH": "/usr/bin:/bin"}, ["y", {"edit": "ls -la"}], 10,
+    )
     text = run.screen_text(raw)
-    assert answered == ["y", "e", "n"]
-    assert "got:y" in text and "got:e" in text and "got:n" in text
+    assert answered == ["y", {"edit": "ls -la"}, "n"]
+    assert "got:y" in text and "got:e" in text and "edited:ls -la" in text and "got:n" in text
     assert "tty" in text   # the command sees a real terminal
     assert (exit_code, timed_out) == (0, False)
+
+
+def test_pty_ctrl_c_interrupts(tmp_path):
+    script = "trap 'echo interrupted; exit 3' INT; read -p 'Run this command? [Y/n/e] ' a; echo \"got:$a\""
+    raw, exit_code, _, answered = run._run_in_pty(script, tmp_path, {"PATH": "/usr/bin:/bin"}, ["ctrl-c"], 10)
+    assert answered == ["ctrl-c"]
+    assert "interrupted" in run.screen_text(raw) and exit_code == 3
+
+
+def test_bad_answer_is_rejected(tmp_path):
+    path = tmp_path / "scenarios.yaml"
+    path.write_text("- id: x\n  run: seer hi\n  answers: [yes]\n")
+    with pytest.raises(ValueError, match="bad answer"):
+        run.load_scenarios(path)
+
+
+def test_expected_error_and_output_checks(tmp_path):
+    results = run.evaluate(
+        {"error": True, "output_contains": ["Error:"], "output_excludes": ["Traceback"],
+         "min_confirmations": 1, "commands_include": [r"^ls\b"]},
+        _metrics(errors=["model not found"], confirmations=2), tmp_path, timed_out=False,
+        output="Error: model not found\n",
+    )
+    assert all(r["ok"] for r in results), results
+    assert {r["check"] for r in results} >= {"error", "output_contains", "min_confirmations"}
+
+
+def test_scenario_config_overrides_user_config(tmp_path, monkeypatch):
+    user = tmp_path / "user"
+    (user / "seer").mkdir(parents=True)
+    (user / "seer" / "config.yaml").write_text(
+        "provider: auto\nbrave: false\nproviders:\n  ollama: {type: openai, model: auto}\n")
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(user))
+    home = run._scenario_config(tmp_path / "scenario", {"brave": True, "providers": {"x": {"type": "openai"}}})
+    import yaml
+    config = yaml.safe_load((home / "seer" / "config.yaml").read_text())
+    assert config["brave"] is True and config["provider"] == "auto"
+    assert set(config["providers"]) == {"ollama", "x"}
 
 
 def test_pty_timeout_kills_the_command(tmp_path):
     _, _, timed_out, _ = run._run_in_pty("sleep 30", tmp_path, {"PATH": "/usr/bin:/bin"}, [], 1)
     assert timed_out
+
+
+def test_pty_keeps_up_with_heavy_output(tmp_path):
+    # A status line redrawn many times a second: the runner must keep reading,
+    # or a full terminal buffer blocks the command (seer mid-reply).
+    script = (
+        "for i in $(seq 1 20000); do printf '\\r  thinking… (%d words)' $i; done;"
+        " echo; read -p 'Run this command? [Y/n/e] ' a; echo \"got:$a\""
+    )
+    raw, _, timed_out, answered = run._run_in_pty(script, tmp_path, {"PATH": "/usr/bin:/bin"}, ["y"], 20)
+    assert not timed_out and answered == ["y"]
+    assert "got:y" in run.screen_text(raw)

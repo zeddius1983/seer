@@ -47,11 +47,14 @@ TERMINAL_SIZE = (40, 100)   # rows, columns
 
 _PROMPT = re.compile(rb"Run this command\? \[Y/n/e\]")
 _ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[()][0-9A-B]")
+_EDIT_PROMPT = re.compile(rb"\$ ")   # the inline editor's prompt after answering e
 _CHECKS = {
-    "mode", "answer_contains", "answer_excludes", "max_llm_calls", "max_commands",
-    "confirmations", "commands_exclude", "files_exist", "files_absent",
+    "mode", "error", "answer_contains", "answer_excludes", "output_contains", "output_excludes",
+    "max_llm_calls", "max_commands", "confirmations", "min_confirmations",
+    "commands_include", "commands_exclude", "files_exist", "files_absent",
 }
-_FIELDS = {"id", "features", "run", "answers", "context", "timeout", "checks", "expect"}
+_FIELDS = {"id", "features", "run", "answers", "context", "config", "timeout", "checks", "expect"}
+_KEYS = {"y": "y\r", "n": "n\r", "ctrl-c": "\x03"}
 
 
 # --- scenarios ---------------------------------------------------------------
@@ -66,6 +69,9 @@ def load_scenarios(path: Path = HERE / "scenarios.yaml") -> list[dict]:
             problems.append("needs an id and a run command")
         if sc.get("id") in seen:
             problems.append("duplicate id")
+        for answer in sc.get("answers", []):
+            if not (set(answer) == {"edit"} if isinstance(answer, dict) else answer in _KEYS):
+                problems.append(f"bad answer {answer!r} (y, n, ctrl-c or {{edit: <command>}})")
         if problems:
             raise ValueError(f"scenario {sc.get('id', '?')}: {'; '.join(problems)}")
         seen.add(sc["id"])
@@ -97,6 +103,8 @@ def run_scenario(sc: dict, seer: str, provider: str, model: str) -> dict:
         trace_path = tmp / "trace.jsonl"
 
         env = {k: v for k, v in os.environ.items() if k not in ("TMUX", "TMUX_PANE", "SEER_TRACE")}
+        if sc.get("config"):
+            env["XDG_CONFIG_HOME"] = str(_scenario_config(tmp / "config", sc["config"]))
         env.update({
             "PATH": f"{bindir}{os.pathsep}{env.get('PATH', '')}",
             "XDG_CACHE_HOME": str(cache),
@@ -112,7 +120,8 @@ def run_scenario(sc: dict, seer: str, provider: str, model: str) -> dict:
         seconds = round(time.monotonic() - started, 1)
         events = _read_trace(trace_path)
         metrics = summarize(events)
-        results = evaluate(sc.get("checks", {}), metrics, project, timed_out)
+        output = screen_text(raw)
+        results = evaluate(sc.get("checks", {}), metrics, project, timed_out, output)
         return {
             "id": sc["id"],
             "passed": all(r["ok"] for r in results),
@@ -122,9 +131,25 @@ def run_scenario(sc: dict, seer: str, provider: str, model: str) -> dict:
             "timed_out": timed_out,
             "seconds": seconds,
             "answers_given": answered,
-            "output": screen_text(raw),
+            "output": output,
             "trace": events,
         }
+
+
+def _scenario_config(config_home: Path, overrides: dict) -> Path:
+    """Your seer config with the scenario's settings on top, in a config home
+    of its own. Top-level keys replace yours; `providers` entries are merged."""
+    user_home = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
+    user_file = user_home / "seer" / "config.yaml"
+    config = (yaml.safe_load(user_file.read_text()) or {}) if user_file.exists() else {}
+    for key, value in overrides.items():
+        if key == "providers":
+            config["providers"] = {**config.get("providers", {}), **value}
+        else:
+            config[key] = value
+    (config_home / "seer").mkdir(parents=True)
+    (config_home / "seer" / "config.yaml").write_text(yaml.safe_dump(config, sort_keys=False))
+    return config_home
 
 
 def _seer_shim(bindir: Path, seer: str, provider: str, model: str) -> Path:
@@ -137,12 +162,13 @@ def _seer_shim(bindir: Path, seer: str, provider: str, model: str) -> Path:
     return bindir
 
 
-def _run_in_pty(command: str, cwd: Path, env: dict, answers: list[str], timeout: float):
+def _run_in_pty(command: str, cwd: Path, env: dict, answers: list, timeout: float):
     """Run command with bash in a pseudo-terminal, answering [Y/n/e] prompts.
 
-    Returns (raw output, exit code, timed out, answers given). Prompts beyond
+    An answer is "y", "n", "ctrl-c", or {"edit": cmd}: press e, then replace
+    the command in the inline editor once its prompt appears. Prompts beyond
     the scenario's answers get "n", so nothing runs that the scenario didn't
-    approve.
+    approve. Returns (raw output, exit code, timed out, answers given).
     """
     pid, fd = pty.fork()
     if pid == 0:   # child: the session leader of a new terminal
@@ -154,7 +180,10 @@ def _run_in_pty(command: str, cwd: Path, env: dict, answers: list[str], timeout:
             os._exit(127)
 
     output = bytearray()
-    answered: list[str] = []
+    answered: list = []
+    prompts = 0
+    scanned = 0      # prompts before this offset are counted
+    editing = None   # (replacement, output offset when e was sent)
     deadline = time.monotonic() + timeout
     timed_out = False
     while True:
@@ -173,10 +202,25 @@ def _run_in_pty(command: str, cwd: Path, env: dict, answers: list[str], timeout:
         if not data:
             break
         output += data
-        while len(answered) < len(_PROMPT.findall(output)):
+        # Only scan what's new (plus a prompt's length, for one split across
+        # reads): the status line redraws ~12 times a second, and rescanning
+        # everything each time falls behind, until a full terminal buffer
+        # blocks seer mid-reply.
+        for match in _PROMPT.finditer(output, max(scanned, len(output) - len(data) - 32)):
+            prompts += 1
+            scanned = match.end()
+        if editing and _EDIT_PROMPT.search(output, editing[1]):
+            # Ctrl+U clears the pre-filled command, then type the replacement.
+            os.write(fd, b"\x15" + editing[0].encode() + b"\r")
+            editing = None
+        while not editing and len(answered) < prompts:
             reply = answers.pop(0) if answers else "n"
             answered.append(reply)
-            os.write(fd, f"{reply}\r".encode())
+            if isinstance(reply, dict):
+                editing = (reply["edit"], len(output))
+                os.write(fd, b"e\r")
+            else:
+                os.write(fd, _KEYS[reply].encode())
     _, status = os.waitpid(pid, 0)
     os.close(fd)
     return bytes(output), os.waitstatus_to_exitcode(status), timed_out, answered
@@ -225,6 +269,7 @@ def summarize(events: list[dict]) -> dict:
         "max_prompt_chars": max((e.get("prompt_chars", 0) for e in llm), default=0),
         "commands": [e.get("command", "") for e in of("command")],
         "confirmations": len(of("confirm")),
+        "edited": sum(1 for e in of("confirm") if e.get("decision") == "edited"),
         "declined": sum(1 for e in of("confirm") if e.get("decision") == "declined"),
         "errors": [e.get("message", "") for e in of("error")],
         # watch mode answers once per batch
@@ -232,19 +277,25 @@ def summarize(events: list[dict]) -> dict:
     }
 
 
-def evaluate(checks: dict, m: dict, project: Path, timed_out: bool) -> list[dict]:
-    """Every check as {check, ok, detail}; timeouts and seer errors always count."""
+def evaluate(checks: dict, m: dict, project: Path, timed_out: bool, output: str = "") -> list[dict]:
+    """Every check as {check, ok, detail}. Timeouts always count, and seer
+    errors do unless the scenario expects one (`error: true`)."""
+    want_error = checks.get("error", False)
     results = [
         {"check": "finished", "ok": not timed_out, "detail": "timed out" if timed_out else ""},
-        {"check": "no_errors", "ok": not m["errors"], "detail": "; ".join(m["errors"])},
+        {"check": "error" if want_error else "no_errors", "ok": bool(m["errors"]) == want_error,
+         "detail": "; ".join(m["errors"]) or ("no error reported" if want_error else "")},
     ]
     answer = m["answer"].lower()
+    screen = output.lower()
 
     def add(name, ok, detail=""):
         results.append({"check": name, "ok": bool(ok), "detail": detail})
 
     for name, want in checks.items():
-        if name == "mode":
+        if name == "error":
+            continue   # handled above
+        elif name == "mode":
             add(name, m["mode"] == want, f"got {m['mode']}")
         elif name == "answer_contains":
             missing = [w for w in want if not any(alt.lower() in answer for alt in str(w).split("|"))]
@@ -252,12 +303,23 @@ def evaluate(checks: dict, m: dict, project: Path, timed_out: bool) -> list[dict
         elif name == "answer_excludes":
             found = [w for w in want if str(w).lower() in answer]
             add(name, not found, f"found: {found}" if found else "")
+        elif name == "output_contains":
+            missing = [w for w in want if not any(alt.lower() in screen for alt in str(w).split("|"))]
+            add(name, not missing, f"missing: {missing}" if missing else "")
+        elif name == "output_excludes":
+            found = [w for w in want if str(w).lower() in screen]
+            add(name, not found, f"found: {found}" if found else "")
         elif name == "max_llm_calls":
             add(name, m["llm_calls"] <= want, f"{m['llm_calls']} calls")
         elif name == "max_commands":
             add(name, len(m["commands"]) <= want, f"{len(m['commands'])} commands")
         elif name == "confirmations":
             add(name, m["confirmations"] == want, f"{m['confirmations']} prompts")
+        elif name == "min_confirmations":
+            add(name, m["confirmations"] >= want, f"{m['confirmations']} prompts")
+        elif name == "commands_include":
+            missing = [p for p in want if not any(re.search(p, c) for c in m["commands"])]
+            add(name, not missing, f"none matched: {missing}" if missing else "")
         elif name == "commands_exclude":
             hits = [c for c in m["commands"] for pattern in want if re.search(pattern, c)]
             add(name, not hits, f"ran: {hits}" if hits else "")
