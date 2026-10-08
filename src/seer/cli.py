@@ -18,21 +18,21 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
 
-from . import __version__
+from . import __version__, trace
 from .config import load_config, save_default_config, CONFIG_PATH, DO_SYSTEM_PROMPT, BRAVE_SYSTEM_PROMPT
 from .config import CONTEXT_FILE, CLI_COMMANDS, resolve_cli_command
 from .system_info import format_for_prompt, get_system_info
 from .context import get_context, read_stdin_batches, reattach_tty, _stdin_has_data, _stdin_is_piped, _read_stdin_until_idle
 from .providers import get_provider
-from .brave import CommandResult, run_brave
+from .brave import CommandResult, run_brave, truncate_output
 console = Console()
 err_console = Console(stderr=True)
 
 
-def _run_shell_command(command: str) -> None:
+def _run_shell_command(command: str) -> int:
     """Execute a shell command using the user's preferred shell."""
     shell = os.environ.get("SHELL") or shutil.which("bash") or shutil.which("sh") or "sh"
-    subprocess.run([shell, "-c", command])
+    return subprocess.run([shell, "-c", command]).returncode
 
 def _find_bash4() -> str:
     """Return path to bash 4+ (supports read -e -i), or empty string."""
@@ -174,6 +174,13 @@ def _confirm_command(command: str) -> Optional[str]:
             console.print("[dim]Enter y, n, or e[/dim]")
 
 
+def _decision(proposed: str, final: Optional[str]) -> str:
+    """How the user answered [Y/n/e], for the trace."""
+    if final is None:
+        return "declined"
+    return "run" if final == proposed else "edited"
+
+
 def _unwrap_markdown_fence(text: str) -> str:
     """Strip outer ```markdown``` wrapper some models add around their entire response."""
     stripped = text.strip()
@@ -238,7 +245,8 @@ def model_label(pcfg, provider=None) -> str:
         return _CLI_NAMES.get(pcfg.type, "model")
     if model in ("haiku", "sonnet", "opus"):   # claude-cli aliases
         return model.capitalize()
-    model = model.rsplit("/", 1)[-1]   # org/model ids from local servers
+    model = model.rsplit("/", 1)[-1]   # org/model ids and file paths from local servers
+    model = re.sub(r"\.gguf$", "", model, flags=re.IGNORECASE)
     if m := _CLAUDE_MODEL.fullmatch(model):
         family, major, minor = m.groups()
         return f"{family.capitalize()} {major}{'.' + minor if minor else ''}"
@@ -254,15 +262,29 @@ def _status(label: str, state: str, buffer: str = "") -> Text:
     return Text(f"  {label} {state}…{words}", style="dim")
 
 
+def _provider(pcfg):
+    """The provider for pcfg, wrapped to record each call when tracing (e2e/)."""
+    trace.event("provider", name=pcfg.name, type=pcfg.type, model=pcfg.model,
+                fallback_models=pcfg.fallback_models)
+    provider = get_provider(pcfg)
+    return trace.TracedProvider(provider) if trace.enabled() else provider
+
+
+def _report_error(e: Exception) -> None:
+    trace.event("error", message=str(e))
+    err_console.print(f"[red]Error:[/red] {e}")
+
+
 def stream_response(system: str, prompt: str, cfg, raw: bool = False, stream: bool = False) -> None:
     pcfg = cfg.get_active_provider()
-    provider = get_provider(pcfg)
+    provider = _provider(pcfg)
     label = lambda: model_label(pcfg, provider)
     buffer = ""
 
     if raw:
         try:
             for chunk in provider.stream(system, prompt):
+                buffer += chunk
                 print(chunk, end="", flush=True)
         except KeyboardInterrupt:
             pass
@@ -321,6 +343,7 @@ def stream_response(system: str, prompt: str, cfg, raw: bool = False, stream: bo
             console.print(_get_padded_renderable(Markdown(buffer)))
         else:
             err_console.print("[yellow]No response received from provider.[/yellow]")
+    trace.event("answer", text=buffer)
 
 
 HELP_TEXT = f"""seer v{__version__} — Shell Enhanced Execution & Reasoning.
@@ -377,6 +400,7 @@ def main(ctx, query, no_context, raw, brave, stream, provider, model, stats, sho
         return
 
     args = list(query)
+    trace.start(__version__)
 
     if args and args[0].startswith("--"):
         err_console.print(f"[red]Unknown option:[/red] {args[0]}")
@@ -408,10 +432,11 @@ def main(ctx, query, no_context, raw, brave, stream, provider, model, stats, sho
         if not task:
             err_console.print("[red]Usage:[/red] seer do <task description>")
             sys.exit(1)
+        trace.event("mode", mode="do")
         try:
             system = DO_SYSTEM_PROMPT + "\n\n" + format_for_prompt()
             pcfg = cfg.get_active_provider()
-            llm = get_provider(pcfg)
+            llm = _provider(pcfg)
             buffer = ""
             console.print()
             with Live(
@@ -427,20 +452,24 @@ def main(ctx, query, no_context, raw, brave, stream, provider, model, stats, sho
             # Extract bash command and explanation from response
             cleaned = textwrap.dedent(_unwrap_markdown_fence(buffer))
             match = re.search(r'```bash\n(.*?)```', cleaned, re.DOTALL)
+            trace.event("answer", text=cleaned)
             if not match:
                 console.print(_get_padded_renderable(Markdown(cleaned)))
                 return
-            command = match.group(1).strip()
+            proposed = match.group(1).strip()
             explanation = cleaned[:match.start()].strip()
 
             if explanation:
                 console.print(_get_padded_renderable(Markdown(explanation)))
-            command = _confirm_command(command)
+            command = _confirm_command(proposed)
+            trace.event("confirm", command=proposed, final=command,
+                        decision=_decision(proposed, command))
             if command:
                 console.print()
-                _run_shell_command(command)
+                exit_code = _run_shell_command(command)
+                trace.event("command", command=command, exit_code=exit_code, asked=True)
         except Exception as e:
-            err_console.print(f"[red]Error:[/red] {e}")
+            _report_error(e)
             sys.exit(1)
         return
 
@@ -460,10 +489,11 @@ def main(ctx, query, no_context, raw, brave, stream, provider, model, stats, sho
                     return
                 piped = piped.strip() or None
             reattach_tty()   # so [Y/n/e] reads the keyboard, not the spent pipe
+        trace.event("mode", mode="brave", piped_chars=len(piped or ""))
         try:
             _cmd_brave(" ".join(args), cfg, raw, piped)
         except Exception as e:
-            err_console.print(f"[red]Error:[/red] {e}")
+            _report_error(e)
             sys.exit(1)
         return
 
@@ -498,19 +528,20 @@ def main(ctx, query, no_context, raw, brave, stream, provider, model, stats, sho
         )
 
     prompt = build_prompt(question, context)
+    trace.event("mode", mode="help" if is_help else "plain", context_chars=len(context or ""))
 
     try:
         system = cfg.system_prompt + "\n\n" + format_for_prompt()
         stream_response(system, prompt, cfg, raw=raw, stream=stream or cfg.stream)
     except Exception as e:
-        err_console.print(f"[red]Error:[/red] {e}")
+        _report_error(e)
         sys.exit(1)
 
 
 def _cmd_brave(task: str, cfg, raw: bool, piped: Optional[str] = None) -> None:
     """Brave mode: let the LLM run commands, then render its final answer."""
     pcfg = cfg.get_active_provider()
-    llm = get_provider(pcfg)
+    llm = _provider(pcfg)
     system = (
         BRAVE_SYSTEM_PROMPT + "\n\n" + format_for_prompt()
         + f"\n\nWorking directory: {os.getcwd()}"
@@ -533,6 +564,7 @@ def _cmd_brave(task: str, cfg, raw: bool, piped: Optional[str] = None) -> None:
 
     def confirm(command: str) -> Optional[str]:
         result = _confirm_command(command)
+        trace.event("confirm", command=command, final=result, decision=_decision(command, result))
         if result is not None:
             approved.append(result)
         return result
@@ -544,6 +576,11 @@ def _cmd_brave(task: str, cfg, raw: bool, piped: Optional[str] = None) -> None:
         err_console.print(Text(f"  $ {shown}", style="dim"), highlight=False)
 
     def on_result(result: CommandResult) -> None:
+        trace.event(
+            "command", command=result.command, exit_code=result.exit_code,
+            asked=result.command in approved, output_chars=len(result.output),
+            output=truncate_output(result.output.strip()),   # what the model sees
+        )
         if result.exit_code is None:
             err_console.print("[dim yellow]    timed out[/dim yellow]")
         elif result.exit_code != 0:
@@ -557,10 +594,12 @@ def _cmd_brave(task: str, cfg, raw: bool, piped: Optional[str] = None) -> None:
             piped=piped,
         )
     except (KeyboardInterrupt, click.Abort):   # Ctrl+C / Ctrl+D, incl. at the [Y/n/e] prompt
+        trace.event("interrupted")
         err_console.print("\n[dim]Brave mode interrupted.[/dim]")
         return
 
     answer = _unwrap_markdown_fence(answer).strip()
+    trace.event("answer", text=answer)
     if not answer:
         err_console.print("[yellow]No response received from provider.[/yellow]")
     elif raw:
@@ -586,6 +625,7 @@ def _cmd_watch(first_batch: str, focus: Optional[str], cfg, raw: bool, stream: b
     if focus:
         system += f"\n\nUser focus: {focus}"
 
+    trace.event("mode", mode="watch")
     err_console.print("[dim]Watch mode — press Ctrl+C to stop.[/dim]\n")
 
     def process_batch(batch: str, n: int) -> None:
@@ -594,7 +634,7 @@ def _cmd_watch(first_batch: str, focus: Optional[str], cfg, raw: bool, stream: b
         try:
             stream_response(system, prompt, cfg, raw=raw, stream=stream)
         except Exception as e:
-            err_console.print(f"[red]Error:[/red] {e}")
+            _report_error(e)
 
     try:
         batch_num = 1
