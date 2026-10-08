@@ -6,6 +6,12 @@ Run seer's end-to-end scenarios against one provider/model and record what happe
   .venv/bin/python e2e/run.py -p ollama -m gemma4:26b --repeat 3
   .venv/bin/python e2e/run.py -p claude-cli --only brave --only plain-question
   .venv/bin/python e2e/run.py --list
+  .venv/bin/python e2e/run.py -v ...      # each model call, command and prompt as it happens
+  .venv/bin/python e2e/run.py -vv ...     # the scenario's terminal, live
+
+e2e/run.sh does the same, syncing the virtualenv first.
+  .venv/bin/python e2e/run.py -v ...   # each model call, command and prompt as it happens
+  .venv/bin/python e2e/run.py -vv ...  # the scenario's terminal, live
 
 Each run gets a fresh fixture workspace (fixtures.py), its own cache directory
 (so `seer help` sees the scenario's context, not yours) and a pseudo-terminal
@@ -90,8 +96,12 @@ def choose(scenarios: list[dict], only: list[str]) -> list[dict]:
 
 # --- running -----------------------------------------------------------------
 
-def run_scenario(sc: dict, seer: str, provider: str, model: str) -> dict:
-    """Run one scenario in a fresh workspace; returns its artifacts and metrics."""
+def run_scenario(sc: dict, seer: str, provider: str, model: str, verbose: int = 0) -> dict:
+    """Run one scenario in a fresh workspace; returns its artifacts and metrics.
+
+    verbose 1 prints each trace event as seer writes it; 2 mirrors the
+    scenario's terminal instead.
+    """
     with tempfile.TemporaryDirectory(prefix="seer-e2e-") as tmp:
         tmp = Path(tmp)
         project = fixtures.build(tmp)
@@ -113,10 +123,23 @@ def run_scenario(sc: dict, seer: str, provider: str, model: str) -> dict:
             "COLUMNS": str(TERMINAL_SIZE[1]),
             "LINES": str(TERMINAL_SIZE[0]),
         })
+        tail = TraceTail(trace_path)
+
+        def print_events():
+            for event in tail.poll():
+                line = describe(event)
+                if line:
+                    # commands seer ran: dim, as seer itself shows them
+                    print(f"    {_dim(line) if event.get('event') == 'command' else line}", flush=True)
+
         started = time.monotonic()
         raw, exit_code, timed_out, answered = _run_in_pty(
             sc["run"], project, env, list(sc.get("answers", [])), sc.get("timeout", DEFAULT_TIMEOUT),
+            on_data=_mirror if verbose >= 2 else None,
+            on_tick=print_events if verbose == 1 else None,
         )
+        if verbose == 1:
+            print_events()   # whatever seer wrote after the last tick
         seconds = round(time.monotonic() - started, 1)
         events = _read_trace(trace_path)
         metrics = summarize(events)
@@ -162,13 +185,16 @@ def _seer_shim(bindir: Path, seer: str, provider: str, model: str) -> Path:
     return bindir
 
 
-def _run_in_pty(command: str, cwd: Path, env: dict, answers: list, timeout: float):
+def _run_in_pty(command: str, cwd: Path, env: dict, answers: list, timeout: float,
+                on_data=None, on_tick=None):
     """Run command with bash in a pseudo-terminal, answering [Y/n/e] prompts.
 
     An answer is "y", "n", "ctrl-c", or {"edit": cmd}: press e, then replace
     the command in the inline editor once its prompt appears. Prompts beyond
     the scenario's answers get "n", so nothing runs that the scenario didn't
     approve. Returns (raw output, exit code, timed out, answers given).
+    on_data(bytes) sees the output as it arrives; on_tick() runs at least
+    every half second.
     """
     pid, fd = pty.fork()
     if pid == 0:   # child: the session leader of a new terminal
@@ -193,6 +219,8 @@ def _run_in_pty(command: str, cwd: Path, env: dict, answers: list, timeout: floa
             os.killpg(pid, signal.SIGKILL)
             break
         ready, _, _ = select.select([fd], [], [], min(remaining, 0.5))
+        if on_tick:
+            on_tick()
         if not ready:
             continue
         try:
@@ -201,6 +229,8 @@ def _run_in_pty(command: str, cwd: Path, env: dict, answers: list, timeout: floa
             break
         if not data:
             break
+        if on_data:
+            on_data(data)
         output += data
         # Only scan what's new (plus a prompt's length, for one split across
         # reads): the status line redraws ~12 times a second, and rescanning
@@ -224,6 +254,74 @@ def _run_in_pty(command: str, cwd: Path, env: dict, answers: list, timeout: floa
     _, status = os.waitpid(pid, 0)
     os.close(fd)
     return bytes(output), os.waitstatus_to_exitcode(status), timed_out, answered
+
+
+def _dim(text: str) -> str:
+    """Grey text on a terminal; plain when piped, saved or NO_COLOR is set."""
+    if os.environ.get("NO_COLOR") or not sys.stdout.isatty():
+        return text
+    return f"\x1b[2m{text}\x1b[0m"
+
+
+def _mirror(data: bytes) -> None:
+    sys.stdout.buffer.write(data)
+    sys.stdout.flush()
+
+
+class TraceTail:
+    """Reads the events seer has appended to its trace since the last poll."""
+
+    def __init__(self, path: Path):
+        self.path, self.offset, self.partial = path, 0, ""
+
+    def poll(self) -> list[dict]:
+        try:
+            with open(self.path, encoding="utf-8") as f:
+                f.seek(self.offset)
+                data = f.read()
+                self.offset = f.tell()
+        except FileNotFoundError:
+            return []
+        *lines, self.partial = (self.partial + data).split("\n")
+        events = []
+        for line in lines:
+            try:
+                events.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+        return events
+
+
+def describe(e: dict):
+    """One line for an event, for -v; None for events not worth a line."""
+    kind = e.get("event")
+
+    def short(text, limit=110):
+        text = " ".join(str(text or "").split())
+        return text if len(text) <= limit else text[:limit - 1] + "…"
+
+    if kind == "mode":
+        piped = e.get("piped_chars") or e.get("context_chars")
+        return f"mode: {e.get('mode')}" + (f" ({piped:,} chars of input)" if piped else "")
+    if kind == "provider":
+        model = str(e.get("model") or "").rsplit("/", 1)[-1]   # local models are often file paths
+        return f"provider: {e.get('name')} · {short(model, 70)}"
+    if kind == "llm":
+        thought = e.get("reasoning_words")
+        return (f"model: {e.get('seconds')}s" + (f", {thought:,} words of reasoning" if thought else "")
+                + f" → {short(e.get('reply')) or '(empty)'}")
+    if kind == "command":
+        code = e.get("exit_code")
+        status = "timed out" if code is None else f"exit {code}"
+        size = f", {e['output_chars']:,} chars" if e.get("output_chars") is not None else ""
+        return f"$ {short(e.get('command'), 90)}  → {status}{size}"
+    if kind == "confirm":
+        return f"[Y/n/e] {short(e.get('command'), 80)}  → {e.get('decision')}"
+    if kind == "answer":
+        return f"answer: {short(e.get('text'))}"
+    if kind in ("error", "interrupted"):
+        return f"{kind}: {short(e.get('message', ''))}"
+    return None
 
 
 def screen_text(raw: bytes) -> str:
@@ -403,6 +501,8 @@ def main(argv=None) -> int:
     parser.add_argument("--label", help="results subdirectory (default: <provider>-<model>)")
     parser.add_argument("--seer", default=str(REPO / ".venv" / "bin" / "seer"), help="seer executable under test")
     parser.add_argument("--list", action="store_true", help="list scenarios and exit")
+    parser.add_argument("-v", "--verbose", action="count", default=0,
+                        help="-v: each model call, command and prompt as it happens; -vv: the terminal, live")
     args = parser.parse_args(argv)
 
     scenarios = choose(load_scenarios(), args.only)
@@ -423,17 +523,26 @@ def main(argv=None) -> int:
     results = []
     for sc in scenarios:
         for n in range(1, args.repeat + 1):
-            print(f"{sc['id']} #{n} … ", end="", flush=True)
-            result = run_scenario(sc, args.seer, args.provider, args.model)
+            if args.verbose:
+                print(f"\n── {sc['id']} #{n}: {sc['run'].strip()}", flush=True)
+            else:
+                print(f"{sc['id']} #{n} … ", end="", flush=True)
+            result = run_scenario(sc, args.seer, args.provider, args.model, args.verbose)
             write_run(out, n, result)
             results.append(result)
-            failed = [c["check"] for c in result["checks"] if not c["ok"]]
             m = result["metrics"]
-            print(
+            verdict = (
                 f"{'PASS' if result['passed'] else 'FAIL'}  {m['llm_calls']} calls, "
                 f"{len(m['commands'])} commands, {result['seconds']}s"
-                + (f"  failed: {', '.join(failed)}" if failed else "")
             )
+            if args.verbose:
+                print(f"\n   {verdict}")
+                for check in result["checks"]:
+                    if not check["ok"]:
+                        print(f"   ✗ {check['check']}" + (f": {check['detail']}" if check["detail"] else ""))
+            else:
+                failed = [c["check"] for c in result["checks"] if not c["ok"]]
+                print(verdict + (f"  failed: {', '.join(failed)}" if failed else ""))
 
     meta = {
         "label": label,

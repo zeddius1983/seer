@@ -63,9 +63,25 @@ def test_status_line_names_the_model():
     ):
         stream_response("system", "prompt", _Config())
 
-    live = _RecordingLive.instances[0]
-    assert live.renderable.plain == "  Sonnet 5.5 thinking…"
-    assert live.updates[-1].plain == "  Sonnet 5.5 thinking… (2 words)"
+    status = _RecordingLive.instances[0].renderable
+    assert status.__rich__().plain == "  Sonnet 5.5 thinking… (2 words)"
+
+
+def test_status_line_shows_reasoning_before_the_answer():
+    from seer.cli import _Status
+
+    class Provider:
+        reasoning = ""
+
+    provider = Provider()
+    status = _Status(ProviderConfig(type="openai", model="gpt-6.1-sol"), provider)
+    assert status.__rich__().plain == "  GPT-6.1 Sol thinking…"
+    provider.reasoning = "The user wants " * 500   # 1,500 words of reasoning, no answer yet
+    assert status.__rich__().plain == "  GPT-6.1 Sol thinking… (reasoning, 1,500 words)"
+    status.text = "Use ls -S"
+    assert status.__rich__().plain == "  GPT-6.1 Sol thinking… (3 words)"
+    status.text = "Yes"
+    assert status.__rich__().plain == "  GPT-6.1 Sol thinking… (1 word)"
 
 
 def test_model_label_prefers_the_resolved_model():

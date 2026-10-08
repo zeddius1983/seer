@@ -256,10 +256,33 @@ def model_label(pcfg, provider=None) -> str:
     return model
 
 
-def _status(label: str, state: str, buffer: str = "") -> Text:
-    """The dim progress line: `  Sonnet 5.5 thinking… (32 words)`."""
-    words = f" ({len(buffer.split())} words)" if buffer else ""
-    return Text(f"  {label} {state}…{words}", style="dim")
+def _count(n: int, noun: str) -> str:
+    return f"{n:,} {noun}{'' if n == 1 else 's'}"
+
+
+class _Status:
+    """The dim progress line: `  Sonnet 5.5 thinking… (32 words)`.
+
+    Live re-renders it on every refresh, so it keeps moving while a reasoning
+    model thinks before its first word — `(reasoning, 1,234 words)` — rather
+    than sitting still as if seer hung. Set `text` to the answer so far.
+    """
+
+    def __init__(self, pcfg, provider, state: str = "thinking"):
+        self.pcfg, self.provider, self.state = pcfg, provider, state
+        self.text = ""
+
+    def __rich__(self) -> Text:
+        label = model_label(self.pcfg, self.provider)
+        words = len(self.text.split())
+        reasoning = len((getattr(self.provider, "reasoning", "") or "").split())
+        if words:
+            detail = f" ({_count(words, 'word')})"
+        elif reasoning:
+            detail = f" (reasoning, {_count(reasoning, 'word')})"
+        else:
+            detail = ""
+        return Text(f"  {label} {self.state}…{detail}", style="dim")
 
 
 def _provider(pcfg):
@@ -278,7 +301,6 @@ def _report_error(e: Exception) -> None:
 def stream_response(system: str, prompt: str, cfg, raw: bool = False, stream: bool = False) -> None:
     pcfg = cfg.get_active_provider()
     provider = _provider(pcfg)
-    label = lambda: model_label(pcfg, provider)
     buffer = ""
 
     if raw:
@@ -299,7 +321,7 @@ def stream_response(system: str, prompt: str, cfg, raw: bool = False, stream: bo
         try:
             try:
                 with Live(
-                    _status(label(), "connecting"),
+                    _Status(pcfg, provider, "connecting"),
                     console=console,
                     refresh_per_second=6,
                     transient=True,
@@ -327,15 +349,11 @@ def stream_response(system: str, prompt: str, cfg, raw: bool = False, stream: bo
         # Buffered rich markdown rendering with dynamic spinner
         try:
             console.print()
-            with Live(
-                _status(label(), "thinking"),
-                console=console,
-                refresh_per_second=12,
-                transient=True,
-            ) as live:
+            status = _Status(pcfg, provider)
+            with Live(status, console=console, refresh_per_second=12, transient=True):
                 for chunk in provider.stream(system, prompt):
                     buffer += chunk
-                    live.update(_status(label(), "thinking", buffer))
+                    status.text = buffer
         except KeyboardInterrupt:
             pass
 
@@ -437,15 +455,11 @@ def main(ctx, query, no_context, raw, brave, stream, provider, model, stats, sho
             llm = _provider(pcfg)
             buffer = ""
             console.print()
-            with Live(
-                _status(model_label(pcfg, llm), "thinking"),
-                console=console,
-                refresh_per_second=12,
-                transient=True,
-            ) as live:
+            status = _Status(pcfg, llm)
+            with Live(status, console=console, refresh_per_second=12, transient=True):
                 for chunk in llm.stream(system, task):
                     buffer += chunk
-                    live.update(_status(model_label(pcfg, llm), "thinking", buffer))
+                    status.text = buffer
 
             # Extract bash command and explanation from response
             cleaned = textwrap.dedent(_unwrap_markdown_fence(buffer))
@@ -552,15 +566,11 @@ def _cmd_brave(task: str, cfg, raw: bool, piped: Optional[str] = None) -> None:
 
     def complete(prompt: str) -> str:
         buffer = ""
-        with Live(
-            _status(model_label(pcfg, llm), "thinking"),
-            console=err_console,
-            refresh_per_second=12,
-            transient=True,
-        ) as live:
+        status = _Status(pcfg, llm)
+        with Live(status, console=err_console, refresh_per_second=12, transient=True):
             for chunk in llm.stream(system, prompt):
                 buffer += chunk
-                live.update(_status(model_label(pcfg, llm), "thinking", buffer))
+                status.text = buffer
         return buffer
 
     approved: list[str] = []

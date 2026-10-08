@@ -378,13 +378,14 @@
 - id: brave-piped-large
   features: [brave, piped, large-output]
   run: cat logs/big.log | seer -b which error message is most common in this log
-  timeout: 420   # each call carries ~20k characters of input; slow on local models
+  timeout: 600   # ~20k characters of input per call: slow locally; a runaway reasoner hits max_tokens first
   checks:
     mode: brave
     confirmations: 0
   expect:
     - "The piped log is ~150 KB, over the 20,000 characters seer passes on: the model sees its start and end with a marker in between."
     - Either answers "database connection timeout" from what it sees, noting the input was cut, or says it can't be sure from partial input. It can't know the file name, so it shouldn't pretend to have counted the whole log.
+    - Reasoning models sometimes think at length here; check `reasoning_words` in the trace. If one reaches the output cap, seer must say so (an error naming max_tokens), not hang or answer nothing.
 
 - id: help-no-context
   features: [help, failure]

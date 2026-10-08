@@ -26,7 +26,7 @@ Use them to verify answers.
 | `start` | seer `version`, `argv`, `cwd` |
 | `mode` | `plain` / `help` / `do` / `brave` / `watch`; `piped_chars` or `context_chars` |
 | `provider` | provider `name`, `type`, configured `model` |
-| `llm` | one model call: `prompt_chars`, `seconds`, `resolved_model`, the full `reply` |
+| `llm` | one model call: `prompt_chars`, `seconds`, `resolved_model`, `reasoning_words` (thinking the model streamed but seer doesn't show), the full `reply` |
 | `command` | a command that ran: `command`, `exit_code`, `asked` (confirmed by the user), `output` exactly as the model saw it (trimmed to start and end when long) |
 | `confirm` | a `[Y/n/e]` prompt: `command`, `decision` (`run` / `edited` / `declined`) |
 | `answer` | the final text shown to the user (watch mode: one per batch) |

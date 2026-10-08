@@ -16,18 +16,24 @@ how seer talks to models.
 ## Running
 
 ```bash
-uv sync                                             # seer under test: .venv/bin/seer
-.venv/bin/python e2e/run.py --list                  # scenarios and their features
-.venv/bin/python e2e/run.py                         # all scenarios, provider from your config
-.venv/bin/python e2e/run.py -p ollama -m gemma4:26b --repeat 3
-.venv/bin/python e2e/run.py -p claude-cli --only brave     # one feature…
-.venv/bin/python e2e/run.py --only brave-big-log           # …or one scenario
+e2e/run.sh --list                          # scenarios and their features
+e2e/run.sh                                 # all scenarios, provider from your config
+e2e/run.sh -p ollama -m gemma4:26b --repeat 3
+e2e/run.sh -p claude-cli --only brave      # one feature…
+e2e/run.sh --only brave-big-log -v         # …or one scenario, events as they happen
+e2e/run.sh --only brave-big-log -vv        # …or watch its terminal live
 ```
+
+`e2e/run.sh` syncs the virtualenv (so `.venv/bin/seer`, the seer under test,
+matches the code), then runs `e2e/run.py` with your arguments; `--help` lists
+them. Without `-v` you get one line per run; `-v` adds each model call (time,
+reasoning, reply), command, prompt and answer as they happen, and why a run
+failed; `-vv` shows the scenario's terminal instead.
 
 `-p`/`-m` are passed to seer as is, so any provider in your
 `~/.config/seer/config.yaml` works. Models vary from run to run, so use
-`--repeat 3` or more when comparing. A full run of all scenarios makes about
-40–60 model calls: free with a local model, a share of your plan's limits with
+`--repeat 3` or more when comparing. A full run of all 35 scenarios makes about
+60–80 model calls: free with a local model, a share of your plan's limits with
 the subscription CLIs, and real money with API keys.
 
 Each run gets:

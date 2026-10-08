@@ -8,8 +8,8 @@ from typing import Iterator
 
 import httpx
 
-from .base import Provider
-from ..config import ProviderConfig
+from .base import Provider, output_limit_error
+from ..config import DEFAULT_MAX_TOKENS, ProviderConfig
 
 ANTHROPIC_BASE_URL = "https://api.anthropic.com"
 ANTHROPIC_API_VERSION = "2023-06-01"
@@ -21,6 +21,8 @@ class AnthropicProvider(Provider):
         self.base_url = (cfg.base_url or ANTHROPIC_BASE_URL).rstrip("/")
         self.api_key = cfg.api_key or os.environ.get("ANTHROPIC_API_KEY") or ""
         self.effort = cfg.reasoning_effort
+        self.max_tokens = cfg.max_tokens or DEFAULT_MAX_TOKENS
+        self.name = cfg.name or "anthropic"
 
     def stream(self, system: str, prompt: str) -> Iterator[str]:
         headers = {
@@ -32,7 +34,7 @@ class AnthropicProvider(Provider):
             "model": self.model,
             # Room for thinking as well as the answer: current models think by
             # default, and thinking counts against max_tokens.
-            "max_tokens": 16000,
+            "max_tokens": self.max_tokens,
             "stream": True,
             "system": system,
             "messages": [{"role": "user", "content": prompt}],
@@ -40,6 +42,9 @@ class AnthropicProvider(Provider):
         if self.effort:
             payload["output_config"] = {"effort": self.effort}
 
+        self.reasoning = ""
+        answered = False
+        stop_reason = None
         with httpx.Client(timeout=httpx.Timeout(10.0, read=300.0)) as client:
             with client.stream(
                 "POST",
@@ -54,9 +59,16 @@ class AnthropicProvider(Provider):
                         continue
                     try:
                         event = json.loads(line[6:])
-                        if event.get("type") == "content_block_delta":
-                            delta = event.get("delta", {})
-                            if delta.get("type") == "text_delta":
-                                yield delta.get("text", "")
-                    except (json.JSONDecodeError, KeyError):
+                    except json.JSONDecodeError:
                         continue
+                    delta = event.get("delta") or {}
+                    if event.get("type") == "content_block_delta":
+                        if delta.get("type") == "text_delta" and delta.get("text"):
+                            answered = True
+                            yield delta["text"]
+                        elif delta.get("type") == "thinking_delta":
+                            self.reasoning += delta.get("thinking") or ""
+                    elif event.get("type") == "message_delta":
+                        stop_reason = delta.get("stop_reason") or stop_reason
+        if stop_reason == "max_tokens" and not answered:
+            raise output_limit_error(self.name, self.max_tokens, bool(self.reasoning))

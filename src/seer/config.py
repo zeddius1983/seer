@@ -154,6 +154,10 @@ Rules:
 - Do not add warnings or disclaimers — the user will review the command before it runs.
 """ + _OS_RULES
 
+# Output cap per model call, reasoning included — a reasoning model can
+# otherwise think indefinitely. `max_tokens` on a provider overrides it.
+DEFAULT_MAX_TOKENS = 16000
+
 # Brave mode keeps the start and end of longer command output. The model is told
 # the number, so it can plan: big enough for a diff, while every step's output
 # is resent with each later one.
@@ -202,6 +206,7 @@ class ProviderConfig:
     model_was_auto: bool = False      # True when model was resolved from "auto"
     command: Optional[str] = None     # CLI providers: binary name/path override
     reasoning_effort: Optional[str] = None  # openai, anthropic, codex-cli; sent only when set
+    max_tokens: Optional[int] = None        # openai, anthropic; default DEFAULT_MAX_TOKENS
     fallback_models: list[str] = field(default_factory=list)  # CLI providers: tried if `model` is unavailable
 
 
@@ -277,6 +282,7 @@ class Config:
             model_was_auto=model_was_auto,
             command=raw.get("command"),
             reasoning_effort=raw.get("reasoning_effort"),
+            max_tokens=raw.get("max_tokens"),
             fallback_models=fallback_models,
         )
 

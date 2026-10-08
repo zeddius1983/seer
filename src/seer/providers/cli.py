@@ -123,10 +123,13 @@ class ClaudeCLIProvider(_CLIProvider):
             delta = inner.get("delta", {})
             if inner.get("type") == "content_block_delta" and delta.get("type") == "text_delta":
                 yield delta.get("text", "")
+            elif inner.get("type") == "content_block_delta" and delta.get("type") == "thinking_delta":
+                self.reasoning += delta.get("thinking") or ""
         elif event.get("type") == "result" and event.get("is_error"):
             self._fail(event.get("result") or "request failed")
 
     def stream(self, system: str, prompt: str) -> Iterator[str]:
+        self.reasoning = ""
         return self._run_with_fallback(lambda model: self._argv(system, model), prompt)
 
 
