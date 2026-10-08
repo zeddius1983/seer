@@ -468,17 +468,17 @@
   expect:
     - Ctrl+C at the prompt ends brave mode cleanly, with nothing run.
 
-- id: brave-open-stream
-  features: [brave, watch, piped]
+- id: brave-slow-pipe
+  features: [brave, piped]
   run: >-
     { printf '2026-10-02 10:00:01 ERROR disk usage above 90%%\n'; sleep 3;
-    printf '2026-10-02 10:00:04 ERROR disk usage above 95%%\n'; sleep 2; }
-    | seer -b what errors appear in this stream
+    printf '2026-10-02 10:00:04 ERROR disk usage above 95%%\n'; }
+    | seer -b what errors appear in this output
   timeout: 120
   checks:
-    mode: watch
-    max_commands: 0
-    answer_contains: ["disk"]
+    mode: brave
+    confirmations: 0
+    output_contains: ["Waiting for the piped command"]
+    answer_contains: ["90", "95"]
   expect:
-    - A still-open pipe goes to watch mode even with -b (brave mode can't take a stream); no commands run.
-    - Reports the disk usage errors.
+    - A pipe that pauses isn't a live stream. Brave mode waits for all of it (saying so after 2s), then reports both errors; nothing goes to watch mode.
