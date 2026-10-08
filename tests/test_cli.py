@@ -6,12 +6,13 @@ import pytest
 from rich.console import Console
 from rich.text import Text
 
-from seer.cli import _TailRenderable, _command_panel, _format_command, _split_at_operators, stream_response
+from seer.cli import _TailRenderable, _command_panel, _format_command, _split_at_operators, model_label, stream_response
+from seer.config import ProviderConfig
 
 
 class _Config:
     def get_active_provider(self):
-        return object()
+        return ProviderConfig(type="anthropic", model="claude-sonnet-5-5")
 
 
 class _RecordingLive:
@@ -51,6 +52,45 @@ def test_streaming_uses_transient_cropped_display_for_long_responses():
     assert live.kwargs["transient"] is True
     assert live.kwargs["vertical_overflow"] == "crop"
     assert isinstance(live.updates[0], _TailRenderable)
+
+
+def test_status_line_names_the_model():
+    provider = type("Provider", (), {"stream": lambda self, *_: iter(["two words"])})()
+
+    with (
+        patch("seer.cli.get_provider", return_value=provider),
+        patch("seer.cli.Live", _RecordingLive),
+    ):
+        stream_response("system", "prompt", _Config())
+
+    live = _RecordingLive.instances[0]
+    assert live.renderable.plain == "  Sonnet 5.5 thinking…"
+    assert live.updates[-1].plain == "  Sonnet 5.5 thinking… (2 words)"
+
+
+def test_model_label_prefers_the_resolved_model():
+    pcfg = ProviderConfig(type="claude-cli", model="sonnet")
+    provider = type("Provider", (), {"resolved_model": "claude-sonnet-5-5"})()
+    assert model_label(pcfg, provider) == "Sonnet 5.5"
+
+
+@pytest.mark.parametrize("ptype, model, label", [
+    ("anthropic", "claude-sonnet-5-5", "Sonnet 5.5"),
+    ("anthropic", "claude-opus-4-8", "Opus 4.8"),
+    ("anthropic", "claude-haiku-4-5", "Haiku 4.5"),
+    ("anthropic", "claude-sonnet-4-5-20250929", "Sonnet 4.5"),
+    ("anthropic", "claude-sonnet-5", "Sonnet 5"),
+    ("openai", "gpt-6.1-sol", "GPT-6.1 Sol"),
+    ("openai", "gpt-4o", "GPT-4o"),
+    ("openai", "gpt-oss:20b", "gpt-oss:20b"),
+    ("openai", "google/gemma-3-12b", "gemma-3-12b"),
+    ("claude-cli", "sonnet", "Sonnet"),
+    ("claude-cli", "auto", "Claude Code"),
+    ("codex-cli", "gpt-6-luna", "GPT-6 Luna"),
+    ("codex-cli", "auto", "Codex"),
+])
+def test_model_label(ptype, model, label):
+    assert model_label(ProviderConfig(type=ptype, model=model)) == label
 
 
 def test_tail_renderable_keeps_the_latest_terminal_lines():
@@ -137,3 +177,43 @@ class TestFormatCommand:
         text = "".join(console.export_text().split())
         assert "z" * 120 in text.replace("│", "")
         assert "…" not in text
+
+
+class TestBravePipedInput:
+    @pytest.fixture
+    def invoke(self, monkeypatch):
+        from click.testing import CliRunner
+        import seer.cli as cli
+
+        calls = {"brave": [], "watch": [], "reattached": 0}
+        monkeypatch.setattr(cli, "_stdin_is_piped", lambda: True)
+        monkeypatch.setattr(cli, "reattach_tty", lambda: calls.__setitem__("reattached", calls["reattached"] + 1))
+        monkeypatch.setattr(cli, "_cmd_brave", lambda task, cfg, raw, piped=None: calls["brave"].append((task, piped)))
+        monkeypatch.setattr(cli, "_cmd_watch", lambda first, focus, *a: calls["watch"].append((first, focus)))
+
+        def invoke(stdin, got_eof, *args):
+            monkeypatch.setattr(cli, "_read_stdin_until_idle", lambda idle_timeout=1.0: (stdin, got_eof))
+            result = CliRunner().invoke(cli.main, ["-b", *args, "explain", "commits"])
+            assert result.exit_code == 0, result.output
+            return calls
+
+        return invoke
+
+    def test_piped_input_is_passed_to_brave_mode(self, invoke):
+        calls = invoke("abc123 fix bug\n", True)
+        assert calls["brave"] == [("explain commits", "abc123 fix bug")]
+        assert calls["reattached"] == 1
+
+    def test_open_stream_goes_to_watch_mode(self, invoke):
+        calls = invoke("line 1\n", False)
+        assert calls["watch"] == [("line 1\n", "explain commits")]
+        assert calls["brave"] == []
+
+    def test_empty_pipe_runs_brave_without_input(self, invoke):
+        calls = invoke("", False)
+        assert calls["brave"] == [("explain commits", None)]
+
+    def test_no_context_ignores_piped_input(self, invoke):
+        calls = invoke("abc123 fix bug\n", True, "--no-context")
+        assert calls["brave"] == [("explain commits", None)]
+        assert calls["reattached"] == 1

@@ -44,12 +44,12 @@ VLLM = {
 
 OPENAI_CLOUD = {
     "type": "openai",
-    "model": "gpt-4o",
+    "model": "gpt-6.1-sol",
 }
 
 ANTHROPIC_CLOUD = {
     "type": "anthropic",
-    "model": "claude-sonnet-4-6",
+    "model": "claude-sonnet-5-5",
 }
 
 
@@ -344,10 +344,10 @@ class TestAutoCLI:
         assert pcfg.fallback_models == ["auto"]
         assert pcfg.model_was_auto is False
 
-    def test_default_codex_prefers_gpt_6_luna_low_effort(self):
+    def test_default_codex_prefers_gpt_6_1_sol_low_effort(self):
         from seer.config import DEFAULT_CONFIG
         codex = DEFAULT_CONFIG["providers"]["codex-cli"]
-        assert codex["model"] == ["gpt-6-luna", "auto"]
+        assert codex["model"] == ["gpt-6.1-sol", "auto"]
         assert codex["reasoning_effort"] == "low"
 
 

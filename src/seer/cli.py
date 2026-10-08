@@ -22,7 +22,7 @@ from . import __version__
 from .config import load_config, save_default_config, CONFIG_PATH, DO_SYSTEM_PROMPT, BRAVE_SYSTEM_PROMPT
 from .config import CONTEXT_FILE, CLI_COMMANDS, resolve_cli_command
 from .system_info import format_for_prompt, get_system_info
-from .context import get_context, read_stdin_batches, _stdin_has_data, _read_stdin_until_idle
+from .context import get_context, read_stdin_batches, reattach_tty, _stdin_has_data, _stdin_is_piped, _read_stdin_until_idle
 from .providers import get_provider
 from .brave import CommandResult, run_brave
 console = Console()
@@ -222,8 +222,42 @@ def build_prompt(question: str, context: Optional[str]) -> str:
     return question
 
 
+_CLAUDE_MODEL = re.compile(r"claude-(haiku|sonnet|opus|fable|mythos)-(\d+)(?:-(\d))?(?:-\d{8})?")
+_GPT_MODEL = re.compile(r"gpt-([\d.]+o?)(?:-([a-z]+))?")
+_CLI_NAMES = {"claude-cli": "Claude Code", "codex-cli": "Codex"}
+
+
+def model_label(pcfg, provider=None) -> str:
+    """Short display name for the model: claude-sonnet-5-5 → Sonnet 5.5,
+    gpt-6.1-sol → GPT-6.1 Sol. Other ids (local models) are shown as-is.
+    Prefers the model the provider reports actually answering (`sonnet` alias
+    → its version) once it is known."""
+    model = getattr(provider, "resolved_model", None) or pcfg.model
+    model = model if isinstance(model, str) else ""
+    if not model or model == "auto":
+        return _CLI_NAMES.get(pcfg.type, "model")
+    if model in ("haiku", "sonnet", "opus"):   # claude-cli aliases
+        return model.capitalize()
+    model = model.rsplit("/", 1)[-1]   # org/model ids from local servers
+    if m := _CLAUDE_MODEL.fullmatch(model):
+        family, major, minor = m.groups()
+        return f"{family.capitalize()} {major}{'.' + minor if minor else ''}"
+    if m := _GPT_MODEL.fullmatch(model):
+        version, variant = m.groups()
+        return f"GPT-{version}" + (f" {variant.capitalize()}" if variant else "")
+    return model
+
+
+def _status(label: str, state: str, buffer: str = "") -> Text:
+    """The dim progress line: `  Sonnet 5.5 thinking… (32 words)`."""
+    words = f" ({len(buffer.split())} words)" if buffer else ""
+    return Text(f"  {label} {state}…{words}", style="dim")
+
+
 def stream_response(system: str, prompt: str, cfg, raw: bool = False, stream: bool = False) -> None:
-    provider = get_provider(cfg.get_active_provider())
+    pcfg = cfg.get_active_provider()
+    provider = get_provider(pcfg)
+    label = lambda: model_label(pcfg, provider)
     buffer = ""
 
     if raw:
@@ -243,7 +277,7 @@ def stream_response(system: str, prompt: str, cfg, raw: bool = False, stream: bo
         try:
             try:
                 with Live(
-                    Text("  connecting…", style="dim"),
+                    _status(label(), "connecting"),
                     console=console,
                     refresh_per_second=6,
                     transient=True,
@@ -272,15 +306,14 @@ def stream_response(system: str, prompt: str, cfg, raw: bool = False, stream: bo
         try:
             console.print()
             with Live(
-                Text("  thinking…", style="dim"),
+                _status(label(), "thinking"),
                 console=console,
                 refresh_per_second=12,
                 transient=True,
             ) as live:
                 for chunk in provider.stream(system, prompt):
                     buffer += chunk
-                    word_count = len(buffer.split())
-                    live.update(Text(f"  thinking… ({word_count} words)", style="dim"))
+                    live.update(_status(label(), "thinking", buffer))
         except KeyboardInterrupt:
             pass
 
@@ -377,18 +410,19 @@ def main(ctx, query, no_context, raw, brave, stream, provider, model, stats, sho
             sys.exit(1)
         try:
             system = DO_SYSTEM_PROMPT + "\n\n" + format_for_prompt()
-            llm = get_provider(cfg.get_active_provider())
+            pcfg = cfg.get_active_provider()
+            llm = get_provider(pcfg)
             buffer = ""
             console.print()
             with Live(
-                Text("  thinking…", style="dim"),
+                _status(model_label(pcfg, llm), "thinking"),
                 console=console,
                 refresh_per_second=12,
                 transient=True,
             ) as live:
                 for chunk in llm.stream(system, task):
                     buffer += chunk
-                    live.update(Text(f"  thinking… ({len(buffer.split())} words)", style="dim"))
+                    live.update(_status(model_label(pcfg, llm), "thinking", buffer))
 
             # Extract bash command and explanation from response
             cleaned = textwrap.dedent(_unwrap_markdown_fence(buffer))
@@ -413,11 +447,21 @@ def main(ctx, query, no_context, raw, brave, stream, provider, model, stats, sho
     # Determine mode: help (analyse context for errors) vs question (answer directly)
     is_help = args in ([], ["help"])
 
-    # Brave mode: free-form queries only — not help, and not piped input.
+    # Brave mode: free-form queries only, not help. Piped input becomes the
+    # task's starting context; a still-open stream (tail -f) goes to watch mode.
     use_brave = cfg.brave if brave is None else brave
-    if use_brave and not is_help and not _stdin_has_data():
+    if use_brave and not is_help:
+        piped = None
+        if _stdin_is_piped():
+            if not no_context:
+                piped, got_eof = _read_stdin_until_idle(idle_timeout=1.0)
+                if piped and not got_eof:
+                    _cmd_watch(piped, " ".join(args), cfg, raw, stream or cfg.stream)
+                    return
+                piped = piped.strip() or None
+            reattach_tty()   # so [Y/n/e] reads the keyboard, not the spent pipe
         try:
-            _cmd_brave(" ".join(args), cfg, raw)
+            _cmd_brave(" ".join(args), cfg, raw, piped)
         except Exception as e:
             err_console.print(f"[red]Error:[/red] {e}")
             sys.exit(1)
@@ -463,9 +507,10 @@ def main(ctx, query, no_context, raw, brave, stream, provider, model, stats, sho
         sys.exit(1)
 
 
-def _cmd_brave(task: str, cfg, raw: bool) -> None:
+def _cmd_brave(task: str, cfg, raw: bool, piped: Optional[str] = None) -> None:
     """Brave mode: let the LLM run commands, then render its final answer."""
-    llm = get_provider(cfg.get_active_provider())
+    pcfg = cfg.get_active_provider()
+    llm = get_provider(pcfg)
     system = (
         BRAVE_SYSTEM_PROMPT + "\n\n" + format_for_prompt()
         + f"\n\nWorking directory: {os.getcwd()}"
@@ -474,14 +519,14 @@ def _cmd_brave(task: str, cfg, raw: bool) -> None:
     def complete(prompt: str) -> str:
         buffer = ""
         with Live(
-            Text("  thinking…", style="dim"),
+            _status(model_label(pcfg, llm), "thinking"),
             console=err_console,
             refresh_per_second=12,
             transient=True,
         ) as live:
             for chunk in llm.stream(system, prompt):
                 buffer += chunk
-                live.update(Text(f"  thinking… ({len(buffer.split())} words)", style="dim"))
+                live.update(_status(model_label(pcfg, llm), "thinking", buffer))
         return buffer
 
     approved: list[str] = []
@@ -509,6 +554,7 @@ def _cmd_brave(task: str, cfg, raw: bool) -> None:
         answer = run_brave(
             task, complete, confirm, on_command, on_result,
             confirm_policy=cfg.brave_confirm,
+            piped=piped,
         )
     except (KeyboardInterrupt, click.Abort):   # Ctrl+C / Ctrl+D, incl. at the [Y/n/e] prompt
         err_console.print("\n[dim]Brave mode interrupted.[/dim]")

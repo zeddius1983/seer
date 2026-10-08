@@ -93,16 +93,39 @@ def read_stdin_batches(interval: float = 15.0) -> Generator[str, None, None]:
             break
 
 
-def _stdin_has_data() -> bool:
-    """Return True if stdin is an actual pipe or file with data (not /dev/null or a pty)."""
+def _stdin_is_piped() -> bool:
+    """Return True if stdin is a real pipe (FIFO) or regular file (not /dev/null or a pty)."""
     try:
         mode = os.fstat(sys.stdin.fileno()).st_mode
-        # Only treat as piped input if stdin is a real pipe (FIFO) or regular file
-        if not (stat_module.S_ISFIFO(mode) or stat_module.S_ISREG(mode)):
-            return False
+        return stat_module.S_ISFIFO(mode) or stat_module.S_ISREG(mode)
+    except (ValueError, OSError):
+        return False
+
+
+def _stdin_has_data() -> bool:
+    """Return True if stdin is an actual pipe or file with data (not /dev/null or a pty)."""
+    if not _stdin_is_piped():
+        return False
+    try:
         return bool(select.select([sys.stdin], [], [], 0)[0])
     except (ValueError, OSError):
         return False
+
+
+def reattach_tty() -> bool:
+    """Point stdin back at the terminal once piped input has been read.
+
+    Prompts — and the editor they may launch — then read the keyboard instead
+    of the spent pipe. Returns False when there is no terminal (e.g. cron).
+    """
+    try:
+        fd = os.open("/dev/tty", os.O_RDWR)
+    except OSError:
+        return False
+    os.dup2(fd, 0)
+    os.close(fd)
+    sys.stdin = open(0, closefd=False)
+    return True
 
 
 def _last_n_lines(text: str, n: int) -> str:

@@ -20,6 +20,7 @@ class AnthropicProvider(Provider):
         self.model = cfg.model
         self.base_url = (cfg.base_url or ANTHROPIC_BASE_URL).rstrip("/")
         self.api_key = cfg.api_key or os.environ.get("ANTHROPIC_API_KEY") or ""
+        self.effort = cfg.reasoning_effort
 
     def stream(self, system: str, prompt: str) -> Iterator[str]:
         headers = {
@@ -29,11 +30,15 @@ class AnthropicProvider(Provider):
         }
         payload = {
             "model": self.model,
-            "max_tokens": 1024,
+            # Room for thinking as well as the answer: current models think by
+            # default, and thinking counts against max_tokens.
+            "max_tokens": 16000,
             "stream": True,
             "system": system,
             "messages": [{"role": "user", "content": prompt}],
         }
+        if self.effort:
+            payload["output_config"] = {"effort": self.effort}
 
         with httpx.Client(timeout=httpx.Timeout(10.0, read=300.0)) as client:
             with client.stream(

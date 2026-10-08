@@ -86,7 +86,7 @@ brave_confirm: auto   # when to ask first: auto | trust | always
 - seer checks each command itself before running it. It doesn't just take the model's word that a command is safe. In `auto` mode only an allowlist of read-only commands runs without asking. Commands like `find -exec`, `xargs`, `sed` and `awk` count as read-only only when what they run or edit is also read-only.
 - The model also marks commands it knows will change something, and those always ask. The model can add confirmations but never skip them, because text in a file or a web page could try to talk it into something harmful.
 - Commands run in your current directory with no input and a 60s timeout, for at most 6 steps. `Ctrl+C` stops at any point.
-- `seer --no-brave <question>` turns brave mode off for one question. `seer help`, `seer do` and piped input never use it.
+- `seer --no-brave <question>` turns brave mode off for one question. `seer help`, `seer do` and live streams (`tail -f … | seer`) never use it.
 - Brave mode needs a capable model. It was tested with Claude Sonnet. Very small local models (~2B) tend to lose track after a few steps.
 
 </details>
@@ -103,6 +103,7 @@ brave_confirm: auto   # when to ask first: auto | trust | always
 | `seer do <task>` | Suggests one command and runs it if you confirm |
 | *question* + `Ctrl+G` | Same as `seer <question>`, straight from the prompt (zsh) |
 | `cmd 2>&1 \| seer` | Explains that command's output |
+| `git log -5 \| seer -b <task>` | Brave mode starting from the piped output |
 | `tail -f app.log \| seer` | Watches a live stream and flags problems every 15s |
 
 **Useful flags:** `-s` streams the answer as it's written · `-r` gives plain text for scripts · `-p <provider>` / `-m <model>` switch the model for one question · `--no-context` skips your terminal output.
@@ -142,7 +143,7 @@ providers:
     model: sonnet        # haiku / sonnet / opus, or a full model id
   codex-cli:
     type: codex-cli
-    model: [gpt-6-luna, auto]   # tried in order; auto = your ~/.codex/config.toml model
+    model: [gpt-6.1-sol, auto]  # tried in order; auto = your ~/.codex/config.toml model
     reasoning_effort: low
 ```
 

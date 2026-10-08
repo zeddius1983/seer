@@ -69,12 +69,14 @@ DEFAULT_CONFIG = {
         },
         "openai": {
             "type": "openai",
-            "model": "gpt-4o",
+            "model": "gpt-6.1-sol",
+            "reasoning_effort": "low",  # low | medium | high | xhigh | max
             # api_key: set via OPENAI_API_KEY env var or here
         },
         "anthropic": {
             "type": "anthropic",
-            "model": "claude-sonnet-4-6",
+            "model": "claude-sonnet-5-5",
+            "reasoning_effort": "low",  # low | medium | high | xhigh | max
             # api_key: set via ANTHROPIC_API_KEY env var or here
         },
         # Subscription CLIs: run your installed `claude` / `codex` with your own login.
@@ -87,7 +89,7 @@ DEFAULT_CONFIG = {
             "type": "codex-cli",
             # Tried in order; falls back to the next one if a model is unavailable.
             # auto = the model set in ~/.codex/config.toml
-            "model": ["gpt-6-luna", "auto"],
+            "model": ["gpt-6.1-sol", "auto"],   # gpt-6-luna is cheaper but unreliable in brave mode
             "reasoning_effort": "low",
         },
     },
@@ -152,7 +154,13 @@ Rules:
 - Do not add warnings or disclaimers — the user will review the command before it runs.
 """ + _OS_RULES
 
+# Brave mode keeps the start and end of longer command output. The model is told
+# the number, so it can plan: big enough for a diff, while every step's output
+# is resent with each later one.
+MAX_OUTPUT_CHARS = 12000
+
 BRAVE_SYSTEM_PROMPT = """You are seer in brave mode: you complete the user's task by running shell commands on their machine yourself, then answer with the result.
+You have no shell tool and need none: you run a command by replying with a `run` block (below), and seer executes it on the user's machine and sends you its output. Never say you can't run commands.
 
 ## Protocol
 Each reply is EITHER one command to run OR the final answer — never both.
@@ -177,8 +185,9 @@ When you have enough information, reply with the final answer and no `run` block
 ## Rules
 - Commands run non-interactively: no stdin, no TTY, ~60s timeout. Never use pagers, editors, `sudo`, `top`, `watch` or `tail -f`.
 - Commands run in the user's working directory (shown below); "here" means that directory.
+- If the prompt includes input the user piped to seer, it is part of the task: start from it, and run commands only for what it doesn't already show.
 - Prefer read-only commands. Combine steps with pipes or && — most tasks need 1–2 commands.
-- Keep output small (e.g. `head`) — long output is truncated.
+- Output over """ + f"{MAX_OUTPUT_CHARS:,}" + """ characters is cut to its start and end, losing the middle. For large output (diffs, logs, many files), get an overview first (`git show --stat`, `wc -l`, `ls`), then read the parts you need — one targeted command per step.
 - `run-write` commands are shown to the user for approval first — never tag a command `run` to avoid that. If the user declines, stop and answer without running anything else.
 """ + _OS_RULES
 
@@ -192,7 +201,7 @@ class ProviderConfig:
     name: Optional[str] = None        # resolved provider key (set when auto-resolved)
     model_was_auto: bool = False      # True when model was resolved from "auto"
     command: Optional[str] = None     # CLI providers: binary name/path override
-    reasoning_effort: Optional[str] = None  # codex-cli only
+    reasoning_effort: Optional[str] = None  # openai, anthropic, codex-cli; sent only when set
     fallback_models: list[str] = field(default_factory=list)  # CLI providers: tried if `model` is unavailable
 
 

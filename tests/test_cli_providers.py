@@ -16,7 +16,10 @@ def _fake_cli(tmp_path, name, events, exit_code=0, stderr=""):
     script.write_text(
         "#!/usr/bin/env python3\n"
         "import json, sys\n"
-        f"json.dump({{'argv': sys.argv[1:], 'stdin': sys.stdin.read()}}, open({str(tmp_path / 'call.json')!r}, 'w'))\n"
+        # codex: record the instructions file's contents while it still exists
+        "files = [json.loads(a.split('=', 1)[1]) for a in sys.argv if a.startswith('model_instructions_file=')]\n"
+        "instructions = open(files[0]).read() if files else None\n"
+        f"json.dump({{'argv': sys.argv[1:], 'stdin': sys.stdin.read(), 'instructions': instructions}}, open({str(tmp_path / 'call.json')!r}, 'w'))\n"
         f"print({lines!r})\n"
         f"sys.stderr.write({stderr!r})\n"
         f"sys.exit({exit_code})\n"
@@ -55,6 +58,16 @@ class TestClaudeCLI:
         assert argv[argv.index("--tools") + 1] == ""
         assert "--no-session-persistence" in argv
 
+    def test_records_the_model_claude_code_resolved(self, tmp_path):
+        cmd = _fake_cli(tmp_path, "claude", [
+            {"type": "system", "subtype": "init", "model": "claude-sonnet-5-5"},
+            _text_delta("ok"),
+        ])
+        provider = get_provider(ProviderConfig(type="claude-cli", model="sonnet", command=cmd))
+        assert provider.resolved_model is None
+        list(provider.stream("SYS", "PROMPT"))
+        assert provider.resolved_model == "claude-sonnet-5-5"
+
     def test_model_auto_omits_model_flag(self, tmp_path):
         cmd = _fake_cli(tmp_path, "claude", [_text_delta("ok")])
         provider = get_provider(ProviderConfig(type="claude-cli", model="auto", command=cmd))
@@ -71,7 +84,7 @@ class TestClaudeCLI:
 
 
 class TestCodexCLI:
-    def test_yields_agent_message_with_system_prepended(self, tmp_path):
+    def test_yields_agent_message_with_system_as_instructions(self, tmp_path):
         cmd = _fake_cli(tmp_path, "codex", [
             {"type": "thread.started"},
             {"type": "item.completed", "item": {"type": "reasoning", "text": "thinking"}},
@@ -83,14 +96,23 @@ class TestCodexCLI:
 
         assert "".join(provider.stream("SYS", "PROMPT")) == "Use `ls -la`."
         call = _call(tmp_path)
-        assert call["stdin"].startswith("SYS")
-        assert call["stdin"].endswith("PROMPT")
+        assert call["stdin"] == "PROMPT"
+        assert call["instructions"] == "SYS"   # replaces Codex's own instructions
+        assert "features.shell_tool=false" in call["argv"]
         argv = call["argv"]
         assert argv[0] == "exec"
         assert argv[argv.index("--sandbox") + 1] == "read-only"
         assert argv[argv.index("--model") + 1] == "gpt-x"
         assert "model_reasoning_effort=low" in argv
         assert "--ephemeral" in argv
+
+    def test_only_the_first_message_is_the_reply(self, tmp_path):
+        cmd = _fake_cli(tmp_path, "codex", [
+            {"type": "item.completed", "item": {"type": "agent_message", "text": "```run\nls\n```"}},
+            {"type": "item.completed", "item": {"type": "agent_message", "text": "I couldn't run it."}},
+        ])
+        provider = get_provider(ProviderConfig(type="codex-cli", model="gpt-x", command=cmd))
+        assert "".join(provider.stream("SYS", "PROMPT")) == "```run\nls\n```"
 
     def test_nonzero_exit_reports_stderr(self, tmp_path):
         cmd = _fake_cli(tmp_path, "codex", [], exit_code=2, stderr="noise\nnot authenticated")
