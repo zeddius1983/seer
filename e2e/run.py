@@ -26,6 +26,7 @@ LLM how to grade them against the scenarios' `expect` lines.
 import argparse
 import datetime
 import fcntl
+import filecmp
 import json
 import os
 import pty
@@ -55,9 +56,9 @@ _PROMPT = re.compile(rb"Run this command\? \[Y/n/e\]")
 _ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[()][0-9A-B]")
 _EDIT_PROMPT = re.compile(rb"\$ ")   # the inline editor's prompt after answering e
 _CHECKS = {
-    "mode", "error", "answer_contains", "answer_excludes", "output_contains", "output_excludes",
+    "mode", "error", "answer_contains", "answer_excludes", "answer_matches", "output_contains", "output_excludes",
     "max_llm_calls", "max_commands", "confirmations", "min_confirmations",
-    "commands_include", "commands_exclude", "files_exist", "files_absent",
+    "commands_include", "commands_exclude", "files_exist", "files_absent", "copied_next_to",
 }
 _FIELDS = {"id", "features", "run", "answers", "context", "config", "timeout", "checks", "expect"}
 _KEYS = {"y": "y\r", "n": "n\r", "ctrl-c": "\x03"}
@@ -375,6 +376,16 @@ def summarize(events: list[dict]) -> dict:
     }
 
 
+def _has_copy_beside(path: Path) -> bool:
+    """Whether another file in path's directory has the same contents, and is
+    independent of it: a symlink or hard link would change along with it."""
+    return path.is_file() and any(
+        other.is_file() and not other.is_symlink() and not other.samefile(path)
+        and filecmp.cmp(path, other, shallow=False)
+        for other in path.parent.iterdir()
+    )
+
+
 def evaluate(checks: dict, m: dict, project: Path, timed_out: bool, output: str = "") -> list[dict]:
     """Every check as {check, ok, detail}. Timeouts always count, and seer
     errors do unless the scenario expects one (`error: true`)."""
@@ -401,6 +412,9 @@ def evaluate(checks: dict, m: dict, project: Path, timed_out: bool, output: str 
         elif name == "answer_excludes":
             found = [w for w in want if str(w).lower() in answer]
             add(name, not found, f"found: {found}" if found else "")
+        elif name == "answer_matches":
+            missing = [p for p in want if not re.search(p, m["answer"])]
+            add(name, not missing, f"none matched: {missing}" if missing else "")
         elif name == "output_contains":
             missing = [w for w in want if not any(alt.lower() in screen for alt in str(w).split("|"))]
             add(name, not missing, f"missing: {missing}" if missing else "")
@@ -421,6 +435,9 @@ def evaluate(checks: dict, m: dict, project: Path, timed_out: bool, output: str 
         elif name == "commands_exclude":
             hits = [c for c in m["commands"] for pattern in want if re.search(pattern, c)]
             add(name, not hits, f"ran: {hits}" if hits else "")
+        elif name == "copied_next_to":
+            missing = [f for f in want if not _has_copy_beside(project / f)]
+            add(name, not missing, f"no copy of: {missing}" if missing else "")
         elif name == "files_exist":
             missing = [p for p in want if not (project / p).exists()]
             add(name, not missing, f"missing: {missing}" if missing else "")

@@ -205,7 +205,7 @@ class TestBravePipedInput:
         calls = {"brave": [], "watch": [], "reattached": 0}
         monkeypatch.setattr(cli, "_stdin_is_piped", lambda: True)
         monkeypatch.setattr(cli, "reattach_tty", lambda: calls.__setitem__("reattached", calls["reattached"] + 1))
-        monkeypatch.setattr(cli, "_cmd_brave", lambda task, cfg, raw, piped=None: calls["brave"].append((task, piped)))
+        monkeypatch.setattr(cli, "_cmd_brave", lambda task, cfg, raw, piped=None, remember=False, earlier=None: calls["brave"].append((task, piped)))
         monkeypatch.setattr(cli, "_cmd_watch", lambda first, focus, *a: calls["watch"].append((first, focus)))
 
         def invoke(stdin, *args):

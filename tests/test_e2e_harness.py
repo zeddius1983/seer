@@ -1,5 +1,6 @@
 """Tests for the e2e runner's offline parts: scenarios, fixtures, checks, terminal handling."""
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -23,6 +24,80 @@ def test_unknown_check_is_rejected(tmp_path):
     path.write_text("- id: x\n  run: seer hi\n  checks: {answer_containz: [a]}\n")
     with pytest.raises(ValueError, match="unknown check 'answer_containz'"):
         run.load_scenarios(path)
+
+
+@pytest.mark.parametrize("answer, passes", [
+    ("Use `ls -lSr`", True),
+    ("ls -Sr", True),
+    ("ls -rS", True),
+    ("ls -lrS", True),
+    ("ls -S -r", True),
+    ("`ls --reverse -S`", True),
+    ("ls -l --sort=size -r", True),
+    ("ls -lS | tac", True),
+    ("Use `ls -S`", False),        # not reversed
+    ("ls -r", False),              # reverses name order, not size order
+    ("ls -SR", False),             # -R is recursive, not reverse
+    ("ls -S well-rounded", False),
+    ("Use `ls -r` to reverse alphabetical order; use `ls -S` to sort by size", False),
+    ("ls -r reverses names, ls -S sorts by size", False),
+    ("ls -r or ls -S", False),
+    ("ls -S | sort -r", False),    # sort's -r, not ls's
+    ("ls -S | grep -r .", False),
+    ("ls -S && rm -r old", False),
+    ("ls -Sr | head", True),
+    ("ls -lS | tac | head", True),
+    ("Sort with `ls -S`.\n\nReverse with `ls -r`.", False),
+    ("Use this:\n\n```bash\nls -lhSr\n```", True),
+])
+def test_followup_plain_needs_a_reversed_size_sort(tmp_path, answer, passes):
+    scenario = next(sc for sc in run.load_scenarios() if sc["id"] == "followup-plain")
+    wanted = {"answer_matches": scenario["checks"]["answer_matches"]}
+    metrics = {"answer": answer, "errors": []}
+    [check] = [r for r in run.evaluate(wanted, metrics, tmp_path, False) if r["check"] == "answer_matches"]
+    assert check["ok"] is passes
+
+
+class TestCopiedNextTo:
+    @staticmethod
+    def _ok(project):
+        checks = {"copied_next_to": ["data/a.gz"]}
+        metrics = {"answer": "", "errors": []}
+        [check] = [r for r in run.evaluate(checks, metrics, project, False) if r["check"] == "copied_next_to"]
+        return check["ok"]
+
+    @pytest.fixture
+    def data(self, tmp_path):
+        (tmp_path / "data").mkdir()
+        (tmp_path / "data" / "a.gz").write_bytes(b"original")
+        return tmp_path / "data"
+
+    def test_identical_file_under_any_name_passes(self, data):
+        (data / "a.gz.backup-today").write_bytes(b"original")
+        assert self._ok(data.parent)
+
+    def test_symlink_fails(self, data):
+        (data / "a.gz.bak").symlink_to(data / "a.gz")
+        assert not self._ok(data.parent)
+
+    def test_hard_link_fails(self, data):
+        os.link(data / "a.gz", data / "a.gz.bak")
+        assert not self._ok(data.parent)
+
+    def test_no_copy_fails(self, data):
+        assert not self._ok(data.parent)
+
+    def test_different_contents_fail(self, data):
+        (data / "a.gz.bak").write_bytes(b"truncat")
+        assert not self._ok(data.parent)
+
+    def test_copy_elsewhere_fails(self, data):
+        (data.parent / "a.gz").write_bytes(b"original")
+        assert not self._ok(data.parent)
+
+    def test_missing_original_fails(self, data):
+        (data / "a.gz").rename(data / "b.gz")
+        assert not self._ok(data.parent)
 
 
 def test_choose_by_id_or_feature():
