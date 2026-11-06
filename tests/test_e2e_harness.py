@@ -28,12 +28,18 @@ def test_unknown_check_is_rejected(tmp_path):
 @pytest.mark.parametrize("answer, passes", [
     ("Use `ls -lSr`", True),
     ("ls -Sr", True),
+    ("ls -rS", True),
+    ("ls -lrS", True),
     ("ls -S -r", True),
     ("`ls --reverse -S`", True),
-    ("Use `ls -S`", False),
-    ("ls well-rounded", False),
+    ("ls -l --sort=size -r", True),
+    ("ls -lS | tac", True),
+    ("Use `ls -S`", False),        # not reversed
+    ("ls -r", False),              # reverses name order, not size order
+    ("ls -SR", False),             # -R is recursive, not reverse
+    ("ls -S well-rounded", False),
 ])
-def test_followup_plain_accepts_bundled_short_options(tmp_path, answer, passes):
+def test_followup_plain_needs_a_reversed_size_sort(tmp_path, answer, passes):
     scenario = next(sc for sc in run.load_scenarios() if sc["id"] == "followup-plain")
     wanted = {"answer_matches": scenario["checks"]["answer_matches"]}
     metrics = {"answer": answer, "errors": []}

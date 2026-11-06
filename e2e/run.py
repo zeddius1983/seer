@@ -402,7 +402,7 @@ def evaluate(checks: dict, m: dict, project: Path, timed_out: bool, output: str 
             found = [w for w in want if str(w).lower() in answer]
             add(name, not found, f"found: {found}" if found else "")
         elif name == "answer_matches":
-            missing = [p for p in want if not re.search(p, m["answer"], re.IGNORECASE)]
+            missing = [p for p in want if not re.search(p, m["answer"])]
             add(name, not missing, f"none matched: {missing}" if missing else "")
         elif name == "output_contains":
             missing = [w for w in want if not any(alt.lower() in screen for alt in str(w).split("|"))]

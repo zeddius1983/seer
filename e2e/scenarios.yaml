@@ -22,7 +22,8 @@
 #     answer_contains   each item must appear in the answer (case-insensitive);
 #                       "a|b" means either
 #     answer_excludes   none may appear
-#     answer_matches    regexes the answer must match (each, case-insensitive)
+#     answer_matches    regexes the answer must match (each, case-sensitive:
+#                       -r and -R are different flags)
 #     output_contains   like answer_contains, on the whole terminal output
 #     output_excludes   like answer_excludes, on the whole terminal output
 #     max_llm_calls     at most this many model calls
@@ -281,7 +282,10 @@
   run: seer how do I list files sorted by size with ls; seer and how do I reverse that order
   checks:
     mode: plain
-    answer_matches: ['\bls\b', '(?<![\w-])(-[a-z]*r[a-z]*|--reverse)\b']
+    answer_matches:
+      - '\bls\b'
+      - '(?<![\w-])-[a-zA-Z]*S[a-zA-Z]*\b|--sort[= ]size\b'    # still sorted by size
+      - '(?<![\w-])-[a-zA-Z]*r[a-zA-Z]*\b|--reverse\b|\btac\b'  # and reversed
   expect:
     - The second answer continues from the first, showing ls -S with the reverse flag (e.g. ls -lSr).
 
