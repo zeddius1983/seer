@@ -522,6 +522,30 @@ class TestRealTmux:
         finally:
             subprocess.run(["tmux", "-L", other, "kill-server"], capture_output=True)
 
+    def test_switching_moves_only_the_terminal_that_asked(self):
+        for name in ("asking", "other", "target"):
+            self._create(name)
+        outer = f"{self.socket}-outer"
+        env = {k: v for k, v in os.environ.items() if k not in ("TMUX", "TMUX_PANE")}
+        try:
+            for name in ("asking", "other"):
+                subprocess.run(
+                    ["tmux", "-L", outer, "-f", "/dev/null", "new-session", "-d", "-s", name,
+                     f"tmux -L {self.socket} attach-session -t ={name}"],
+                    env=env, check=True,
+                )
+                time.sleep(0.5)
+            # A key typed into "other" makes it the terminal tmux picks if it has to.
+            subprocess.run(["tmux", "-L", outer, "send-keys", "-t", "=other:", "Enter"], check=True)
+            time.sleep(0.5)
+            code =f'from seer import tui; tui.SOCKET = "{self.socket}"; r = tui.attach_session("target")'
+            assert self._in_pane("=asking:", code, "switched") == "0"
+            time.sleep(0.5)
+            clients = self._tmux("list-clients", "-F", "#{client_session}").stdout.split()
+            assert sorted(clients) == ["other", "target"]
+        finally:
+            subprocess.run(["tmux", "-L", outer, "kill-server"], capture_output=True)
+
     def test_status_left_runs_the_script(self):
         self._create("one")
         left = self._tmux("show-options", "-g", "status-left").stdout

@@ -256,7 +256,7 @@ def attach_session(name: str) -> int:
     """Join a session, or move to it from another one. Returns tmux's exit code."""
     colors = os.environ.get("COLORTERM") in ("truecolor", "24bit")
     join = ["switch-client" if in_tui() else "attach-session", "-t", f"={name}"]
-    client =["tmux", "-L", SOCKET, "-u", *(["-T", "RGB"] if colors else [])]
+    client = ["tmux", "-L", SOCKET, "-u", *(["-T", "RGB"] if colors else [])]
     hint = _ctrl_g_hint()
     notice = [";", "display-message", "-d", "8000", hint] if hint else []
     return subprocess.run([*client, *join, *notice], env=_env()).returncode
