@@ -1,7 +1,5 @@
 # SEER — Shell Enhanced Execution & Reasoning
 
-![Built with AI assistance](https://img.shields.io/badge/Built%20with-AI%20assistance-blueviolet?logo=openai&logoColor=white)
-
 **An AI assistant that lives in your terminal.** It sees what just went wrong and tells you how to fix it. It answers shell questions. In brave mode, it does the job for you.
 
 ![seer help explaining a failed tar command](docs/images/seer-help.svg)
