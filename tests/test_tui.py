@@ -1,6 +1,8 @@
 """Tests for `seer --tui`: the launcher, the status bar and per-session memory."""
 
+import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -22,7 +24,7 @@ def log_dir(tmp_path, monkeypatch):
 
 @pytest.fixture
 def in_session(monkeypatch):
-    monkeypatch.setenv("SEER_TUI", "1")
+    monkeypatch.setenv("SEER_TUI", "/tmp/tmux-1000/seer")
     monkeypatch.setenv("TMUX", "/tmp/tmux-1000/seer,4242,7")
 
 
@@ -105,6 +107,18 @@ class TestMeteredProvider:
         with pytest.raises(RuntimeError):
             list(provider.stream("", ""))
         assert reports == [1]
+
+    def test_counts_reasoning_the_provider_kept_to_itself(self):
+        class Reasoning:
+            reasoning = ""
+
+            def stream(self, system, prompt):
+                self.reasoning = "r" * 400
+                yield "abcd"
+
+        reports = []
+        list(tui.MeteredProvider(Reasoning(), reports.append).stream("", ""))
+        assert reports == [101]
 
     def test_status_line_still_sees_the_providers_attributes(self):
         assert tui.MeteredProvider(_FakeProvider(), print).resolved_model == "claude-sonnet-5-5"
@@ -200,6 +214,12 @@ class TestBraveDefaults:
         monkeypatch.delenv("TMUX", raising=False)
         assert load_config().brave is False
 
+    def test_a_tmux_started_from_a_session_is_not_a_session(self, monkeypatch):
+        monkeypatch.setenv("SEER_TUI", "/tmp/tmux-1000/seer")
+        monkeypatch.setenv("TMUX", "/tmp/tmux-1000/default,999,0")
+        self.path.write_text("brave: false\n")
+        assert load_config().brave is False
+
     def test_status_style_is_checked(self):
         self.path.write_text("tui_status: fancy\n")
         with pytest.raises(ValueError):
@@ -214,6 +234,16 @@ class TestSessionMemory:
         conversation.record("first session", "answer")
         monkeypatch.setenv("TMUX", "/tmp/tmux-1000/seer,4242,8")
         assert conversation.earlier() is None
+
+    def test_exchanges_do_not_expire_while_the_session_is_open(self, in_session):
+        conversation.record("old question", "answer")
+        log = conversation._log_path()
+        exchanges = json.loads(log.read_text())
+        exchanges[0]["time"] = time.time() - 7 * 24 * 60 * 60
+        log.write_text(json.dumps(exchanges))
+        conversation.record("new question", "answer")
+        text = conversation.earlier()
+        assert "old question" in text and "new question" in text
 
     def test_keeps_far_more_than_a_terminal(self, in_session):
         for n in range(conversation.MAX_EXCHANGES + 3):
@@ -231,10 +261,20 @@ class TestSessionMemory:
             conversation.record(f"question-{n}-", "x" * conversation.MAX_ANSWER_CHARS)
         text = conversation.earlier()
         assert "question-19-" in text and "question-0-" not in text
-        assert len(text) < conversation.SESSION_MAX_CHARS * 1.1
+        assert len(text) <= conversation.SESSION_MAX_CHARS
+
+    def test_budget_counts_directories_and_framing(self, in_session):
+        for n in range(conversation.SESSION_MAX_EXCHANGES):
+            conversation.record(f"question-{n}-", "x" * conversation.MAX_ANSWER_CHARS)
+        log = conversation._log_path()
+        exchanges = json.loads(log.read_text())
+        for e in exchanges:
+            e["cwd"] = "/deep" * 200
+        log.write_text(json.dumps(exchanges))
+        assert len(conversation.earlier()) <= conversation.SESSION_MAX_CHARS
 
     def test_one_huge_exchange_is_still_kept(self):
-        huge = {"question": "q", "answer": "x" * 50000, "commands": []}
+        huge = {"cwd": "/", "question": "q", "answer": "x" * 50000, "commands": []}
         assert conversation._fit_budget([huge]) == [huge]
 
     def test_survives_an_idle_half_hour(self, in_session, monkeypatch, log_dir):
@@ -245,13 +285,31 @@ class TestSessionMemory:
         conversation.record("elsewhere", "answer")
         assert (log_dir / "tui-4242-7.json").exists()
 
-    def test_an_abandoned_log_is_pruned_eventually(self, in_session, monkeypatch, log_dir):
+    def _idle_log_then_prune(self, monkeypatch, server_running):
         conversation.record("question", "answer")
-        old = time.time() - conversation.SESSION_MAX_AGE - 1
+        old = time.time() - conversation.ABANDONED_LOG_AGE - 1
         os.utime(conversation._log_path(), (old, old))
+        monkeypatch.setattr(conversation, "_server_running", lambda pid: server_running)
         monkeypatch.delenv("SEER_TUI")
         conversation.record("elsewhere", "answer")
+
+    def test_an_open_session_survives_days_idle(self, in_session, monkeypatch, log_dir):
+        self._idle_log_then_prune(monkeypatch, server_running=True)
+        assert (log_dir / "tui-4242-7.json").exists()
+
+    def test_a_log_is_pruned_once_its_server_is_gone(self, in_session, monkeypatch, log_dir):
+        self._idle_log_then_prune(monkeypatch, server_running=False)
         assert not (log_dir / "tui-4242-7.json").exists()
+
+    def test_an_unrecognisable_session_log_counts_as_abandoned(self, log_dir):
+        assert conversation._is_abandoned(log_dir / "tui-oops.json")
+
+    def test_server_running_checks_the_process(self):
+        assert conversation._server_running(os.getpid())
+        finished = subprocess.Popen([sys.executable, "-c", ""])
+        finished.wait()
+        assert not conversation._server_running(finished.pid)
+        assert not conversation._server_running(2 ** 70)
 
     def test_terminals_outside_a_session_are_unchanged(self, monkeypatch):
         monkeypatch.delenv("SEER_TUI", raising=False)
@@ -283,6 +341,11 @@ class TestCommand:
     def test_closed_hook_keeps_the_formats_intact(self):
         # A Path would collapse the // and tmux would reject the substitution.
         assert "#{s/[$]//:hook_session}" in tui._closed_hook()
+
+    def test_closed_hook_quotes_the_path_for_the_shell(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(conversation, "CONVERSATION_DIR", tmp_path / "cache dir")
+        inner = shlex.split(tui._closed_hook())[1]   # as tmux hands it to the shell
+        assert shlex.split(inner)[:2] == ["rm", "-f"] and len(shlex.split(inner)) == 3
 
 
 def _status_script(path, *glyphs):
@@ -424,6 +487,40 @@ class TestRealTmux:
         while (log_dir / first).exists() and time.time() < deadline:
             time.sleep(0.1)
         assert not (log_dir / first).exists() and (log_dir / second).exists()
+
+    @pytest.mark.parametrize("dirname", ["cache dir", "it's here", "semi;colon"])
+    def test_closing_a_session_handles_any_cache_path(self, monkeypatch, dirname):
+        log_dir = self.tmp / dirname
+        log_dir.mkdir()
+        monkeypatch.setattr(conversation, "CONVERSATION_DIR", log_dir)
+        self._create("keep")
+        self._create("one")
+        log = log_dir / self._log_name("=one:", "a")
+        log.touch()
+        self._tmux("kill-session", "-t", "=one")
+        deadline = time.time() + 5
+        while log.exists() and time.time() < deadline:
+            time.sleep(0.1)
+        assert not log.exists()
+
+    def test_a_tmux_started_from_a_pane_is_not_a_session(self):
+        self._create("one")
+        other = f"{self.socket}-other"
+        out = self.tmp / "inner"
+        probe = self.tmp / "probe.py"
+        probe.write_text(
+            "from seer.config import in_tui, load_config\n"
+            f"open({str(out)!r}, 'w').write(str((in_tui(), load_config().brave)))\n"
+        )
+        command = f"tmux -L {other} -f /dev/null new-session -d -s plain '{sys.executable} {probe}'"
+        self._tmux("send-keys", "-t", "=one:", command, "Enter")
+        try:
+            deadline = time.time() + 20
+            while time.time() < deadline and not (out.exists() and out.read_text()):
+                time.sleep(0.1)
+            assert out.read_text() == "(False, False)"
+        finally:
+            subprocess.run(["tmux", "-L", other, "kill-server"], capture_output=True)
 
     def test_status_left_runs_the_script(self):
         self._create("one")

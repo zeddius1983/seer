@@ -18,6 +18,7 @@ through the same confirmation rules as ever.
 import fcntl
 import json
 import os
+import re
 import tempfile
 import time
 from pathlib import Path
@@ -28,10 +29,11 @@ from .config import CONVERSATION_DIR, in_tui
 
 MAX_EXCHANGES = 3
 MAX_AGE = 30 * 60   # seconds
-# A --tui session's log is deleted when the session closes. The age is for one
-# that never got to, e.g. after a crash.
+# A --tui session's log is deleted when the session closes, and its exchanges
+# don't expire before that. The age is for a log that was never deleted because
+# its server crashed or was killed.
 SESSION_MAX_EXCHANGES = 20
-SESSION_MAX_AGE = 24 * 60 * 60
+ABANDONED_LOG_AGE = 24 * 60 * 60
 SESSION_MAX_CHARS = 12000   # what's sent, however many exchanges that allows
 # Brave mode resends the prompt with every step, and local models can have
 # small context windows, so what's kept stays short.
@@ -64,15 +66,27 @@ def _log_path() -> Path:
     return CONVERSATION_DIR / (_session_log_name() or f"{os.getsid(0)}.json")
 
 
+def _server_running(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)   # signal 0 only checks
+    except PermissionError:
+        return True   # it's there, and someone else's
+    except (OSError, OverflowError):
+        return False
+    return True
+
+
+def _is_abandoned(path: Path) -> bool:
+    """Whether a --tui log's server is gone: an idle session may still be open."""
+    m = re.fullmatch(r"tui-(\d+)-\d+\.json", path.name)
+    return not (m and _server_running(int(m.group(1))))
+
+
 def _fit_budget(exchanges: list[dict]) -> list[dict]:
-    """The newest exchanges that fit in SESSION_MAX_CHARS, and always the last."""
-    kept: list[dict] = []
-    total = 0
-    for e in reversed(exchanges):
-        total += len(e["question"]) + len(e["answer"]) + sum(len(c) for c in e["commands"])
-        if kept and total > SESSION_MAX_CHARS:
-            break
-        kept.insert(0, e)
+    """The newest exchanges that fit in SESSION_MAX_CHARS as sent, and always the last."""
+    kept = exchanges
+    while len(kept) > 1 and len(_render(kept)) > SESSION_MAX_CHARS:
+        kept = kept[1:]
     return kept
 
 
@@ -95,7 +109,7 @@ def _load() -> list[dict]:
     """This terminal's unexpired exchanges, oldest first."""
     try:
         exchanges = json.loads(_log_path().read_text(encoding="utf-8"))
-        cutoff = time.time() - (SESSION_MAX_AGE if _session_log_name() else MAX_AGE)
+        cutoff = 0 if _session_log_name() else time.time() - MAX_AGE
         return [e for e in exchanges if _is_exchange(e) and e["time"] >= cutoff]
     except (OSError, ValueError, TypeError):
         return []   # no log, or an unreadable one: start afresh
@@ -106,8 +120,10 @@ def earlier() -> Optional[str]:
     exchanges = _load()
     if not exchanges:
         return None
-    if _session_log_name():
-        exchanges = _fit_budget(exchanges)
+    return _render(_fit_budget(exchanges) if _session_log_name() else exchanges)
+
+
+def _render(exchanges: list[dict]) -> str:
     parts = [_FRAMING]
     for n, e in enumerate(exchanges, 1):
         lines = [f"[{n}] In {e['cwd']}, the user asked: {e['question']}"]
@@ -172,10 +188,10 @@ def _prune() -> None:
     """Delete expired logs, so closed terminals' answers don't stay on disk."""
     now = time.time()
     for path in CONVERSATION_DIR.iterdir():
-        # A --tui session can sit idle far longer than a terminal's log lasts.
-        max_age = SESSION_MAX_AGE if path.name.startswith("tui-") else MAX_AGE
+        session_log = path.name.startswith("tui-")
+        max_age = ABANDONED_LOG_AGE if session_log else MAX_AGE
         try:
-            if path.stat().st_mtime < now - max_age:
+            if path.stat().st_mtime < now - max_age and (not session_log or _is_abandoned(path)):
                 path.unlink()
         except OSError:
             pass   # another seer got there first

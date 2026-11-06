@@ -165,8 +165,9 @@ def push_status(label: str, used: Optional[int], window: Optional[int], confirm:
 class MeteredProvider:
     """Wraps a provider to report the size of each model call to the status bar.
 
-    The reply counts too: it takes up the model's context window just as the
-    request does. Providers don't report usage yet, so this is characters ÷ 4.
+    The reply and any reasoning count too: they take up the model's context
+    window just as the request does. Providers don't report usage yet, so this
+    is characters ÷ 4.
     """
 
     def __init__(self, provider, report):
@@ -183,6 +184,7 @@ class MeteredProvider:
                 chars += len(chunk)
                 yield chunk
         finally:
+            chars += len(getattr(self._provider, "reasoning", "") or "")
             self._report(chars // 4)
 
 
@@ -232,7 +234,8 @@ def _closed_hook() -> str:
     seer here: the server's pid and the session's id are what name the log."""
     # Joined by hand: a Path would collapse the // in the tmux format.
     log = f"{conversation.CONVERSATION_DIR}/" + conversation.session_log_name("#{pid}", "#{s/[$]//:hook_session}")
-    return f"run-shell {shlex.quote('rm -f ' + log)}"
+    # Quoted twice: once for the shell that runs rm, once for tmux.
+    return f"run-shell {shlex.quote('rm -f ' + shlex.quote(log))}"
 
 
 def create_session(name: str, label: str, window: Optional[int], confirm: str, style: str) -> None:
@@ -252,15 +255,8 @@ def create_session(name: str, label: str, window: Optional[int], confirm: str, s
 def attach_session(name: str) -> int:
     """Join a session, or move to it from another one. Returns tmux's exit code."""
     colors = os.environ.get("COLORTERM") in ("truecolor", "24bit")
-    join = (
-        ["switch-client", "-t", f"={name}"] if in_tui() and _on_our_server()
-        else ["attach-session", "-t", f"={name}"]
-    )
-    client = ["tmux", "-L", SOCKET, "-u", *(["-T", "RGB"] if colors else [])]
+    join = ["switch-client" if in_tui() else "attach-session", "-t", f"={name}"]
+    client =["tmux", "-L", SOCKET, "-u", *(["-T", "RGB"] if colors else [])]
     hint = _ctrl_g_hint()
     notice = [";", "display-message", "-d", "8000", hint] if hint else []
     return subprocess.run([*client, *join, *notice], env=_env()).returncode
-
-
-def _on_our_server() -> bool:
-    return Path(os.environ.get("TMUX", "").split(",")[0]).name == SOCKET

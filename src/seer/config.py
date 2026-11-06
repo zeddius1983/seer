@@ -21,10 +21,12 @@ CONVERSATION_DIR = _cache_dir() / "conversations"
 
 
 def in_tui() -> bool:
-    """Whether this run is inside a `seer --tui` session. TMUX too: a shell
-    that left the session, or started its own tmux elsewhere, may still have
-    SEER_TUI set."""
-    return bool(os.environ.get("SEER_TUI") and os.environ.get("TMUX"))
+    """Whether this run is inside a `seer --tui` session. SEER_TUI is inherited
+    by whatever a session's shells start, including another tmux, so it only
+    counts if it names the socket of the tmux server this run is really in.
+    $TMUX is "socket,server pid,session id"."""
+    socket = os.environ.get("SEER_TUI")
+    return bool(socket) and os.environ.get("TMUX", "").rsplit(",", 2)[0] == socket
 
 CLI_COMMANDS = {"claude-cli": "claude", "codex-cli": "codex"}
 
