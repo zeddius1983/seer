@@ -1,5 +1,6 @@
 """Tests for the e2e runner's offline parts: scenarios, fixtures, checks, terminal handling."""
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -41,6 +42,11 @@ def test_unknown_check_is_rejected(tmp_path):
     ("Use `ls -r` to reverse alphabetical order; use `ls -S` to sort by size", False),
     ("ls -r reverses names, ls -S sorts by size", False),
     ("ls -r or ls -S", False),
+    ("ls -S | sort -r", False),    # sort's -r, not ls's
+    ("ls -S | grep -r .", False),
+    ("ls -S && rm -r old", False),
+    ("ls -Sr | head", True),
+    ("ls -lS | tac | head", True),
     ("Sort with `ls -S`.\n\nReverse with `ls -r`.", False),
     ("Use this:\n\n```bash\nls -lhSr\n```", True),
 ])
@@ -69,6 +75,14 @@ class TestCopiedNextTo:
     def test_identical_file_under_any_name_passes(self, data):
         (data / "a.gz.backup-today").write_bytes(b"original")
         assert self._ok(data.parent)
+
+    def test_symlink_fails(self, data):
+        (data / "a.gz.bak").symlink_to(data / "a.gz")
+        assert not self._ok(data.parent)
+
+    def test_hard_link_fails(self, data):
+        os.link(data / "a.gz", data / "a.gz.bak")
+        assert not self._ok(data.parent)
 
     def test_no_copy_fails(self, data):
         assert not self._ok(data.parent)

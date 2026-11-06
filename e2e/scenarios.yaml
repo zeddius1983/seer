@@ -287,11 +287,13 @@
     mode: plain
     answer_matches:
       # One ls command, sorted by size and reversed. Each lookahead stays within
-      # that command: it stops at punctuation and at the next ls.
+      # that command's own flags: it stops at punctuation, at the next ls and at
+      # the next command, so the -r in `ls -S | sort -r` doesn't count. Piping
+      # to tac is the one reversal allowed after ls.
       - |-
         (?x) \bls\b
-        (?= (?:(?!\bls\b)[^\n`;,])* (?<![\w-]) (?: -[a-zA-Z]*S[a-zA-Z]*\b | --sort[= ]size\b ) )
-        (?= (?:(?!\bls\b)[^\n`;,])* (?<![\w-]) (?: -[a-zA-Z]*r[a-zA-Z]*\b | --reverse\b | \btac\b ) )
+        (?= (?:(?!\bls\b)[^\n`;,|&])* (?<![\w-]) (?: -[a-zA-Z]*S[a-zA-Z]*\b | --sort[= ]size\b ) )
+        (?= (?:(?!\bls\b)[^\n`;,|&])* (?: (?<![\w-]) (?: -[a-zA-Z]*r[a-zA-Z]*\b | --reverse\b ) | \|\s*tac\b ) )
   expect:
     - The second answer continues from the first, showing ls -S with the reverse flag (e.g. ls -lSr).
 

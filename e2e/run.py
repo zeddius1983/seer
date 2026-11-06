@@ -377,9 +377,11 @@ def summarize(events: list[dict]) -> dict:
 
 
 def _has_copy_beside(path: Path) -> bool:
-    """Whether another file in path's directory has the same contents."""
+    """Whether another file in path's directory has the same contents, and is
+    independent of it: a symlink or hard link would change along with it."""
     return path.is_file() and any(
-        other != path and other.is_file() and filecmp.cmp(path, other, shallow=False)
+        other.is_file() and not other.is_symlink() and not other.samefile(path)
+        and filecmp.cmp(path, other, shallow=False)
         for other in path.parent.iterdir()
     )
 
