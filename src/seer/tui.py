@@ -244,12 +244,16 @@ def create_session(name: str, label: str, window: Optional[int], confirm: str, s
     exists = subprocess.run(_tmux("has-session", "-t", f"={name}"), env=env, capture_output=True)
     if exists.returncode == 0:
         return
-    subprocess.run(_tmux(
+    command = _tmux(
         "new-session", "-d", "-s", name, "-c", os.getcwd(), ";",
         "set-option", "-t", f"={name}:", "status-right", status_right(label, None, window, confirm, style), ";",
-        "set-option", "-g", "status-left", status_left(style), ";",
+        "set-option", "-t", f"={name}:", "status-left", status_left(style), ";",
         "set-hook", "-g", "session-closed", _closed_hook(),
-    ), env=env, check=True, capture_output=True, text=True)
+    )
+    result = subprocess.run(command, env=env, capture_output=True, text=True)
+    # Another terminal can create it between the check and here: join that one.
+    if result.returncode != 0 and "duplicate session" not in result.stderr:
+        raise subprocess.CalledProcessError(result.returncode, command, result.stdout, result.stderr)
 
 
 def attach_session(name: str) -> int:

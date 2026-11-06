@@ -147,13 +147,14 @@ Each stage ships separately.
 - `--no-brave` still works for one question. `seer help` and `seer do` still never use brave mode.
 
 **Memory across panes** (`conversation.py`)
-- With `SEER_TUI` set, the log is named after the server pid and session id in `$TMUX` instead of the POSIX session, so a session's panes share it and sessions stay separate.
+- With `SEER_TUI` set, the log is named after the server pid and the pane's current session instead of the POSIX session, so a session's panes share it, sessions stay separate, and a moved window joins its new session's memory.
 - Keep up to 20 exchanges with no 30-minute expiry, newest first within a 12,000-character budget. Small local models still fit, because this is resent at every brave step.
 - `_prune` deletes any log idle for 30 minutes, so session logs get their own rule: a `session-closed` tmux hook deletes the log, and a log is only pruned once its server has stopped and it has been idle for 24 hours.
 - Still no command output in this stage. `$(seer …)` and `--no-context` behave as they do today.
 
 **Status bar**: session, directory and git state on the left; model, context, confirmation mode and time on the right.
 - seer sets each session's `status-right` after every model call rather than having tmux poll a Python command. Escape `#` and `%` in model names.
+- Both sides are set per session, so a new session can't change the look of an existing one.
 - `src/seer/shell/seer-status.sh` draws the directory and git segments for the active pane, since only a command can work those out.
 - Model: `model_label()`, so it shows the model that last answered.
 - Current size: characters in the last request and reply ÷ 4, always shown with `~`, measured by a provider wrapper like `trace.TracedProvider`.

@@ -19,8 +19,10 @@ import fcntl
 import json
 import os
 import re
+import subprocess
 import tempfile
 import time
+from functools import lru_cache
 from pathlib import Path
 from typing import Optional, Sequence
 
@@ -53,13 +55,31 @@ def session_log_name(server_pid: str, session_id: str) -> str:
     return f"tui-{server_pid}-{session_id}.json"
 
 
+@lru_cache(maxsize=None)
+def _current_session_id(pane: str) -> Optional[str]:
+    """The session a pane is in now. Cached: a run asks several times."""
+    try:
+        result = subprocess.run(
+            ["tmux", "display-message", "-p", "-t", pane, "#{session_id}"],
+            capture_output=True, text=True, timeout=3,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return result.stdout.strip().lstrip("$") or None if result.returncode == 0 else None
+
+
 def _session_log_name() -> Optional[str]:
-    """This --tui session's log. $TMUX is "socket,server pid,session id", the
-    same in all of a session's panes and never reused while the server runs."""
+    """This --tui session's log. $TMUX is "socket,server pid,session id", and
+    ids are never reused while the server runs. Its session id is only where the
+    shell started, though: a window moved to another session keeps it, so ask
+    tmux where the pane is now."""
     if not in_tui():
         return None
     parts = os.environ["TMUX"].split(",")
-    return session_log_name(parts[-2], parts[-1]) if len(parts) >= 3 else None
+    if len(parts) < 3:
+        return None
+    pane = os.environ.get("TMUX_PANE")
+    return session_log_name(parts[-2], (pane and _current_session_id(pane)) or parts[-1])
 
 
 def _log_path() -> Path:

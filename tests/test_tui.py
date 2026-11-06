@@ -6,6 +6,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import threading
 import time
 
 import pytest
@@ -19,6 +20,7 @@ from seer.config import load_config
 def log_dir(tmp_path, monkeypatch):
     path = tmp_path / "seer" / "conversations"
     monkeypatch.setattr(conversation, "CONVERSATION_DIR", path)
+    conversation._current_session_id.cache_clear()
     return path
 
 
@@ -26,6 +28,7 @@ def log_dir(tmp_path, monkeypatch):
 def in_session(monkeypatch):
     monkeypatch.setenv("SEER_TUI", "/tmp/tmux-1000/seer")
     monkeypatch.setenv("TMUX", "/tmp/tmux-1000/seer,4242,7")
+    monkeypatch.delenv("TMUX_PANE", raising=False)
 
 
 class TestStatusBar:
@@ -234,6 +237,32 @@ class TestSessionMemory:
         conversation.record("first session", "answer")
         monkeypatch.setenv("TMUX", "/tmp/tmux-1000/seer,4242,8")
         assert conversation.earlier() is None
+
+    def _pane_in_session(self, monkeypatch, result):
+        monkeypatch.setenv("TMUX_PANE", "%3")
+        monkeypatch.setattr(conversation.subprocess, "run", result)
+
+    def test_uses_the_session_the_pane_is_in_now(self, in_session, monkeypatch):
+        calls = []
+
+        def tmux(args, **kw):
+            calls.append(args)
+            return subprocess.CompletedProcess(args, 0, "$9\n", "")
+
+        self._pane_in_session(monkeypatch, tmux)
+        assert conversation._log_path().name == "tui-4242-9.json"
+        assert conversation._log_path().name == "tui-4242-9.json"
+        assert len(calls) == 1 and calls[0][-3:] == ["-t", "%3", "#{session_id}"]
+
+    def test_falls_back_to_where_the_shell_started_if_tmux_fails(self, in_session, monkeypatch):
+        self._pane_in_session(monkeypatch, lambda args, **kw: subprocess.CompletedProcess(args, 1, "", "no pane"))
+        assert conversation._log_path().name == "tui-4242-7.json"
+
+    def test_falls_back_if_tmux_cannot_run(self, in_session, monkeypatch):
+        def missing(*args, **kw):
+            raise FileNotFoundError("tmux")
+        self._pane_in_session(monkeypatch, missing)
+        assert conversation._log_path().name == "tui-4242-7.json"
 
     def test_exchanges_do_not_expire_while_the_session_is_open(self, in_session):
         conversation.record("old question", "answer")
@@ -548,5 +577,71 @@ class TestRealTmux:
 
     def test_status_left_runs_the_script(self):
         self._create("one")
-        left = self._tmux("show-options", "-g", "status-left").stdout
+        left = self._tmux("show-options", "-t", "=one:", "status-left").stdout
         assert "seer-status.sh" in left
+
+    def test_a_new_session_keeps_the_look_of_existing_ones(self):
+        def shown(session):   # -A: what the session really uses, inherited or not
+            return self._tmux("show-options", "-A", "-t", f"={session}:", "status-left").stdout
+
+        tui.create_session("fancy", "m", None, "auto", "nerdfont")
+        tui.create_session("simple", "m", None, "auto", "plain")
+        assert "\ue0b0" in shown("fancy") and "\ue0b0" not in shown("simple")
+
+    def test_a_moved_window_joins_its_new_session(self, log_dir):
+        self._create("from")
+        self._create("to")
+        self._tmux("new-window", "-d", "-t", "=from:")
+        started = self._log_name("=from:1", "a")
+        joined = self._log_name("=to:", "b")
+        assert started != joined
+        self._tmux("move-window", "-s", "=from:1", "-t", "=to:")
+        assert self._log_name("=to:1", "c") == joined
+
+    def test_launching_at_the_same_moment_joins_one_session(self):
+        errors = []
+
+        def launch():
+            try:
+                self._create("race")
+            except subprocess.CalledProcessError as e:
+                errors.append(e.stderr)
+
+        threads = [threading.Thread(target=launch) for _ in range(4)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        assert not errors
+        assert self._tmux("list-sessions", "-F", "#S").stdout.split() == ["race"]
+
+    def test_other_tmux_errors_are_still_reported(self, monkeypatch):
+        monkeypatch.setattr(tui.subprocess, "run", lambda args, **kw: subprocess.CompletedProcess(args, 1, "", "boom"))
+        with pytest.raises(subprocess.CalledProcessError):
+            self._create("one")
+
+    def _write_tmux_conf(self, path):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("set-option -ga @loaded x\n")
+
+    def _times_loaded(self):
+        self._create("one")
+        return len(self._tmux("show-options", "-gqv", "@loaded").stdout.strip())
+
+    def test_loads_tmux_config_from_a_custom_xdg_directory(self, monkeypatch):
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(self.tmp / "xdg"))
+        self._write_tmux_conf(self.tmp / "xdg" / "tmux" / "tmux.conf")
+        assert self._times_loaded() == 1
+
+    @pytest.mark.parametrize("xdg", [None, ".config"])
+    def test_loads_tmux_config_from_the_usual_directory_once(self, monkeypatch, xdg):
+        if xdg:
+            monkeypatch.setenv("XDG_CONFIG_HOME", str(self.tmp / xdg))
+        else:
+            monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+        self._write_tmux_conf(self.tmp / ".config" / "tmux" / "tmux.conf")
+        assert self._times_loaded() == 1
+
+    def test_loads_tmux_config_from_home(self):
+        self._write_tmux_conf(self.tmp / ".tmux.conf")
+        assert self._times_loaded() == 1
