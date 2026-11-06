@@ -19,6 +19,13 @@ def _cache_dir() -> Path:
 CONTEXT_FILE = _cache_dir() / "context"
 CONVERSATION_DIR = _cache_dir() / "conversations"
 
+
+def in_tui() -> bool:
+    """Whether this run is inside a `seer --tui` session. TMUX too: a shell
+    that left the session, or started its own tmux elsewhere, may still have
+    SEER_TUI set."""
+    return bool(os.environ.get("SEER_TUI") and os.environ.get("TMUX"))
+
 CLI_COMMANDS = {"claude-cli": "claude", "codex-cli": "codex"}
 
 
@@ -211,6 +218,7 @@ class ProviderConfig:
     command: Optional[str] = None     # CLI providers: binary name/path override
     reasoning_effort: Optional[str] = None  # openai, anthropic, codex-cli; sent only when set
     max_tokens: Optional[int] = None        # openai, anthropic; default DEFAULT_MAX_TOKENS
+    context_window: Optional[int] = None    # the model's size in tokens, for the --tui status bar
     fallback_models: list[str] = field(default_factory=list)  # CLI providers: tried if `model` is unavailable
 
 
@@ -225,6 +233,7 @@ class Config:
     brave: bool = False
     brave_confirm: str = "auto"       # auto | trust | always — see brave.CONFIRM_POLICIES
     auto_cli: object = False          # False | True | list of CLI provider names
+    tui_status: str = "nerdfont"      # nerdfont | plain: how --tui draws its status bar
     model_override: Optional[str] = None   # -m: applies to whichever provider is active, `auto` included
 
     def _auto_cli_order(self) -> list[str]:
@@ -288,6 +297,7 @@ class Config:
             command=raw.get("command"),
             reasoning_effort=raw.get("reasoning_effort"),
             max_tokens=raw.get("max_tokens"),
+            context_window=raw.get("context_window"),
             fallback_models=fallback_models,
         )
 
@@ -324,6 +334,14 @@ def load_config() -> Config:
     providers.update(data.get("providers", {}))
     merged["providers"] = providers
 
+    brave = bool(merged.get("brave", False))
+    brave_confirm = _brave_confirm(merged.get("brave_confirm", "auto"))
+    # A --tui session is brave, and anything but a read-only command asks:
+    # `always` is stricter than that, so it stays, and `trust` isn't.
+    if in_tui():
+        brave = True
+        brave_confirm = "auto" if brave_confirm == "trust" else brave_confirm
+
     return Config(
         provider=merged["provider"],
         providers=merged["providers"],
@@ -331,9 +349,10 @@ def load_config() -> Config:
         system_prompt=merged.get("system_prompt", SYSTEM_PROMPT),
         stream=bool(merged.get("stream", False)),
         memory=bool(merged.get("memory", True)),
-        brave=bool(merged.get("brave", False)),
-        brave_confirm=_brave_confirm(merged.get("brave_confirm", "auto")),
+        brave=brave,
+        brave_confirm=brave_confirm,
         auto_cli=merged.get("auto_cli", False),
+        tui_status=_tui_status(merged.get("tui_status", "nerdfont")),
     )
 
 
@@ -341,6 +360,13 @@ def _brave_confirm(value) -> str:
     value = str(value).lower()
     if value not in ("auto", "trust", "always"):
         raise ValueError(f"brave_confirm must be auto, trust or always (got '{value}').")
+    return value
+
+
+def _tui_status(value) -> str:
+    value = str(value).lower()
+    if value not in ("nerdfont", "plain"):
+        raise ValueError(f"tui_status must be nerdfont or plain (got '{value}').")
     return value
 
 
