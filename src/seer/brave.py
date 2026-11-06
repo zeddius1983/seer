@@ -674,14 +674,16 @@ def build_brave_prompt(
     steps: list[CommandResult],
     notice: Optional[str] = None,
     piped: Optional[str] = None,
+    earlier: Optional[str] = None,
 ) -> str:
     """The task plus every command run so far, framed as the model's own history.
 
     Providers are single-turn, so without the framing models read the transcript
     as part of the task and re-run commands that already succeeded.
     piped is input the user piped to seer (`git log | seer -b …`), given up front.
+    earlier is the conversation so far in this terminal (conversation.earlier).
     """
-    parts = []
+    parts = [earlier] if earlier else []
     if piped:
         parts.append(
             "Input the user piped to seer for this task:\n"
@@ -726,6 +728,7 @@ def run_brave(
     max_steps: int = MAX_STEPS,
     confirm_policy: str = "auto",
     piped: Optional[str] = None,
+    earlier: Optional[str] = None,
 ) -> str:
     """Drive the brave-mode loop and return the final answer (Markdown).
 
@@ -741,7 +744,7 @@ def run_brave(
             notice = _DECLINED
         elif notice is None and len(steps) >= max_steps:
             notice = _STEP_LIMIT
-        reply = complete(build_brave_prompt(task, steps, notice, piped))
+        reply = complete(build_brave_prompt(task, steps, notice, piped, earlier))
         proposed = extract_command(reply)
         if proposed is None:
             return reply

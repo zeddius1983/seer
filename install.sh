@@ -8,7 +8,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/zeddius1983/seer/main/install.sh | bash -s -- --all
 #
 #   Specific version (tag or branch):
-#   curl -fsSL https://raw.githubusercontent.com/zeddius1983/seer/main/install.sh | bash -s -- --version v1.3.1
+#   curl -fsSL https://raw.githubusercontent.com/zeddius1983/seer/main/install.sh | bash -s -- --version v1.4.0
 
 set -euo pipefail
 

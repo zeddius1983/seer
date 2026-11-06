@@ -18,7 +18,7 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
 
-from . import __version__, trace
+from . import __version__, conversation, trace
 from .config import load_config, save_default_config, CONFIG_PATH, DO_SYSTEM_PROMPT, BRAVE_SYSTEM_PROMPT
 from .config import CONTEXT_FILE, CLI_COMMANDS, resolve_cli_command
 from .system_info import format_for_prompt, get_system_info
@@ -219,14 +219,15 @@ class _TailRenderable:
                 yield Segment.line()
 
 
-def build_prompt(question: str, context: Optional[str]) -> str:
+def build_prompt(question: str, context: Optional[str], earlier: Optional[str] = None) -> str:
+    prompt = question
     if context:
-        return (
+        prompt = (
             f"Terminal context (recent session output):\n"
             f"```\n{context}\n```\n\n"
             f"{question}"
         )
-    return question
+    return f"{earlier}\n\nThe user's new request:\n{prompt}" if earlier else prompt
 
 
 _CLAUDE_MODEL = re.compile(r"claude-(haiku|sonnet|opus|fable|mythos)-(\d+)(?:-(\d))?(?:-\d{8})?")
@@ -285,6 +286,10 @@ class _Status:
         return Text(f"  {label} {self.state}…{detail}", style="dim")
 
 
+def _at_terminal() -> bool:
+    return sys.stdout.isatty()
+
+
 def _provider(pcfg):
     """The provider for pcfg, wrapped to record each call when tracing (e2e/)."""
     trace.event("provider", name=pcfg.name, type=pcfg.type, model=pcfg.model,
@@ -298,7 +303,8 @@ def _report_error(e: Exception) -> None:
     err_console.print(f"[red]Error:[/red] {e}")
 
 
-def stream_response(system: str, prompt: str, cfg, raw: bool = False, stream: bool = False) -> None:
+def stream_response(system: str, prompt: str, cfg, raw: bool = False, stream: bool = False) -> str:
+    """Show the model's answer as configured, and return it."""
     pcfg = cfg.get_active_provider()
     provider = _provider(pcfg)
     buffer = ""
@@ -362,6 +368,7 @@ def stream_response(system: str, prompt: str, cfg, raw: bool = False, stream: bo
         else:
             err_console.print("[yellow]No response received from provider.[/yellow]")
     trace.event("answer", text=buffer)
+    return buffer
 
 
 HELP_TEXT = f"""seer v{__version__} — Shell Enhanced Execution & Reasoning.
@@ -386,7 +393,7 @@ Examples:
     }
 )
 @click.argument("query", nargs=-1)
-@click.option("--no-context", is_flag=True, help="Do not attach terminal context.")
+@click.option("--no-context", is_flag=True, help="Do not attach terminal context or the conversation so far.")
 @click.option("--raw", "-r", is_flag=True, help="Stream raw text, disabling glow and rich rendering.")
 @click.option("--brave/--no-brave", "-b", default=None, help="Brave mode: let seer run the commands needed to answer (overrides the `brave` config setting).")
 @click.option("--stream", "-s", is_flag=True, default=False, help="Stream tokens as they arrive instead of waiting for the full response.")
@@ -442,6 +449,11 @@ def main(ctx, query, no_context, raw, brave, stream, provider, model, stats, sho
         cfg.provider = provider
     cfg.model_override = model
 
+    # Scripts and $(seer …) get repeatable answers: memory is for a person at a
+    # terminal. --no-context leaves this question out of it both ways.
+    remember = cfg.memory and not no_context and _at_terminal()
+    earlier = conversation.earlier() if remember else None
+
     # Special sub-command: do
     if args and args[0] == "do":
         task = " ".join(args[1:])
@@ -457,7 +469,7 @@ def main(ctx, query, no_context, raw, brave, stream, provider, model, stats, sho
             console.print()
             status = _Status(pcfg, llm)
             with Live(status, console=console, refresh_per_second=12, transient=True):
-                for chunk in llm.stream(system, task):
+                for chunk in llm.stream(system, build_prompt(task, None, earlier)):
                     buffer += chunk
                     status.text = buffer
 
@@ -467,6 +479,8 @@ def main(ctx, query, no_context, raw, brave, stream, provider, model, stats, sho
             trace.event("answer", text=cleaned)
             if not match:
                 console.print(_get_padded_renderable(Markdown(cleaned)))
+                if remember:
+                    conversation.record(task, cleaned)
                 return
             proposed = match.group(1).strip()
             explanation = cleaned[:match.start()].strip()
@@ -480,6 +494,11 @@ def main(ctx, query, no_context, raw, brave, stream, provider, model, stats, sho
                 console.print()
                 exit_code = _run_shell_command(command)
                 trace.event("command", command=command, exit_code=exit_code, asked=True)
+                step = conversation.describe_command(command, exit_code)
+            else:
+                step = conversation.describe_command(proposed, declined=True)
+            if remember:
+                conversation.record(task, explanation or "(no explanation given)", [step])
         except Exception as e:
             _report_error(e)
             sys.exit(1)
@@ -508,7 +527,7 @@ def main(ctx, query, no_context, raw, brave, stream, provider, model, stats, sho
             reattach_tty()   # so [Y/n/e] reads the keyboard, not the spent pipe
         trace.event("mode", mode="brave", piped_chars=len(piped or ""))
         try:
-            _cmd_brave(" ".join(args), cfg, raw, piped)
+            _cmd_brave(" ".join(args), cfg, raw, piped, remember, earlier)
         except Exception as e:
             _report_error(e)
             sys.exit(1)
@@ -544,18 +563,25 @@ def main(ctx, query, no_context, raw, brave, stream, provider, model, stats, sho
             "Tip: pipe output directly with [bold]cmd 2>&1 | seer[/bold]"
         )
 
-    prompt = build_prompt(question, context)
+    # `seer help` is about the terminal output, not the conversation, but what
+    # it says is remembered: "how do I apply that fix" is a likely next question.
+    prompt = build_prompt(question, context, None if is_help else earlier)
     trace.event("mode", mode="help" if is_help else "plain", context_chars=len(context or ""))
 
     try:
         system = cfg.system_prompt + "\n\n" + format_for_prompt()
-        stream_response(system, prompt, cfg, raw=raw, stream=stream or cfg.stream)
+        answer = stream_response(system, prompt, cfg, raw=raw, stream=stream or cfg.stream)
     except Exception as e:
         _report_error(e)
         sys.exit(1)
+    if remember:
+        conversation.record(question, answer)
 
 
-def _cmd_brave(task: str, cfg, raw: bool, piped: Optional[str] = None) -> None:
+def _cmd_brave(
+    task: str, cfg, raw: bool, piped: Optional[str] = None,
+    remember: bool = False, earlier: Optional[str] = None,
+) -> None:
     """Brave mode: let the LLM run commands, then render its final answer."""
     pcfg = cfg.get_active_provider()
     llm = _provider(pcfg)
@@ -574,12 +600,15 @@ def _cmd_brave(task: str, cfg, raw: bool, piped: Optional[str] = None) -> None:
         return buffer
 
     approved: list[str] = []
+    steps: list[str] = []   # as remembered for follow-up questions
 
     def confirm(command: str) -> Optional[str]:
         result = _confirm_command(command)
         trace.event("confirm", command=command, final=result, decision=_decision(command, result))
         if result is not None:
             approved.append(result)
+        else:
+            steps.append(conversation.describe_command(command, declined=True))
         return result
 
     def on_command(command: str) -> None:
@@ -589,6 +618,7 @@ def _cmd_brave(task: str, cfg, raw: bool, piped: Optional[str] = None) -> None:
         err_console.print(Text(f"  $ {shown}", style="dim"), highlight=False)
 
     def on_result(result: CommandResult) -> None:
+        steps.append(conversation.describe_command(result.command, result.exit_code))
         trace.event(
             "command", command=result.command, exit_code=result.exit_code,
             asked=result.command in approved, output_chars=len(result.output),
@@ -605,6 +635,7 @@ def _cmd_brave(task: str, cfg, raw: bool, piped: Optional[str] = None) -> None:
             task, complete, confirm, on_command, on_result,
             confirm_policy=cfg.brave_confirm,
             piped=piped,
+            earlier=earlier,
         )
     except (KeyboardInterrupt, click.Abort):   # Ctrl+C / Ctrl+D, incl. at the [Y/n/e] prompt
         trace.event("interrupted")
@@ -613,6 +644,8 @@ def _cmd_brave(task: str, cfg, raw: bool, piped: Optional[str] = None) -> None:
 
     answer = _unwrap_markdown_fence(answer).strip()
     trace.event("answer", text=answer)
+    if remember:
+        conversation.record(task, answer, steps)
     if not answer:
         err_console.print("[yellow]No response received from provider.[/yellow]")
     elif raw:
@@ -699,6 +732,14 @@ def _cmd_context(provider_override, model_override):
         console.print(Panel("[dim]No context captured yet.[/dim]",
                             title="[bold yellow]Terminal Context[/bold yellow]",
                             border_style="yellow"))
+    earlier = conversation.earlier() if cfg.memory else None
+    if earlier:
+        console.print()
+        console.print(Panel(
+            Syntax(earlier, "text", theme="ansi_dark", word_wrap=True),
+            title="[bold magenta]Earlier Conversation[/bold magenta]",
+            border_style="magenta",
+        ))
 
 
 def _cmd_stats(provider_override, model_override):
@@ -754,6 +795,10 @@ def _cmd_stats(provider_override, model_override):
         t.add_row("Base URL", pcfg.base_url or "[dim]default[/dim]")
     t.add_row("", "")
     t.add_row("Brave mode", f"{'on' if cfg.brave else 'off'} · confirm: {cfg.brave_confirm}")
+    t.add_row(
+        "Conversation",
+        f"last {conversation.MAX_EXCHANGES} exchanges, {conversation.MAX_AGE // 60} min" if cfg.memory else "off",
+    )
     t.add_row("Context limit", f"{cfg.context_lines} lines (max)")
     t.add_row("Context captured", f"{context_lines_actual} lines · {context_chars} chars · ~{est_tokens} tokens")
     t.add_row("System prompt", f"~{system_tokens} tokens")

@@ -107,7 +107,19 @@ brave_confirm: auto   # when to ask first: auto | trust | always
 | `git log -5 \| seer -b <task>` | Brave mode starting from the piped output |
 | `tail -f app.log \| seer` | Watches a live stream and flags problems every 15s |
 
-**Useful flags:** `-s` streams the answer as it's written · `-r` gives plain text for scripts · `-p <provider>` / `-m <model>` switch the model for one question · `--no-context` skips your terminal output.
+**Follow-ups work.** seer remembers your last 3 questions in each terminal for 30 minutes, so you can ask `seer -b find the largest file in ~/Downloads`, then `seer -b back up this file`.
+
+<details>
+<summary>What seer remembers</summary>
+
+- It keeps your question, the commands it ran and its answer, not the commands' output. Long answers are shortened.
+- Each terminal tab or tmux pane has its own log, readable only by you, in `~/.cache/seer/conversations`. Expired logs are deleted the next time seer saves an answer.
+- Remembered text is sent to your model with each new question, marked as a record and not as instructions. Commands still go through the usual confirmations.
+- `seer --no-context <question>` leaves one question out, `seer --context` shows what's remembered, and `memory: false` in your config turns it off. It's also off when seer's output goes to a pipe or a script, so `$(seer …)` gives repeatable results.
+
+</details>
+
+**Useful flags:** `-s` streams the answer as it's written · `-r` gives plain text for scripts · `-p <provider>` / `-m <model>` switch the model for one question · `--no-context` skips your terminal output and the conversation so far.
 
 **Diagnostics:** `seer --stats` shows the active model and settings, `seer --context` shows exactly what gets sent, and `seer config` prints your config file.
 
@@ -178,7 +190,7 @@ Reasoning models think before they answer. While they do, the status line counts
 
 ## How it works
 
-A small shell hook saves your recent terminal output after every command. `seer help` sends that output, plus your OS and shell, to the model. Inside tmux seer reads the whole screen, including error output. Outside tmux it sees the last command and its exit code.
+A small shell hook saves your recent terminal output after every command. `seer help` sends that output, plus your OS and shell, to the model. Inside tmux seer reads the whole screen, including error output. Outside tmux it sees the last command and its exit code. Other questions don't include your terminal output, only what you've [recently asked seer](#everyday-use) in that terminal.
 
 ---
 
@@ -188,7 +200,7 @@ A small shell hook saves your recent terminal output after every command. `seer 
 **Specific version or branch** (any git ref):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/zeddius1983/seer/main/install.sh | bash -s -- --version v1.3.1
+curl -fsSL https://raw.githubusercontent.com/zeddius1983/seer/main/install.sh | bash -s -- --version v1.4.0
 ```
 
 **Different `Ctrl+G` key** (zsh `bindkey` notation, e.g. `^@` for Ctrl+Space):

@@ -17,6 +17,7 @@ def _cache_dir() -> Path:
     return Path.home() / ".cache" / "seer"
 
 CONTEXT_FILE = _cache_dir() / "context"
+CONVERSATION_DIR = _cache_dir() / "conversations"
 
 CLI_COMMANDS = {"claude-cli": "claude", "codex-cli": "codex"}
 
@@ -30,6 +31,9 @@ DEFAULT_CONFIG = {
     "provider": "auto",
     "context_lines": 100,
     "stream": False,
+    # Remember recent questions and answers in each terminal, so follow-ups
+    # like "back up this file" work. They expire after 30 minutes.
+    "memory": True,
     # Brave mode: seer runs the commands needed to answer free-form queries
     # (incl. Ctrl+G) itself. Anything not known to be read-only asks first.
     "brave": False,
@@ -217,6 +221,7 @@ class Config:
     context_lines: int = 100
     system_prompt: str = SYSTEM_PROMPT
     stream: bool = False
+    memory: bool = True
     brave: bool = False
     brave_confirm: str = "auto"       # auto | trust | always — see brave.CONFIRM_POLICIES
     auto_cli: object = False          # False | True | list of CLI provider names
@@ -325,6 +330,7 @@ def load_config() -> Config:
         context_lines=merged.get("context_lines", 100),
         system_prompt=merged.get("system_prompt", SYSTEM_PROMPT),
         stream=bool(merged.get("stream", False)),
+        memory=bool(merged.get("memory", True)),
         brave=bool(merged.get("brave", False)),
         brave_confirm=_brave_confirm(merged.get("brave_confirm", "auto")),
         auto_cli=merged.get("auto_cli", False),
