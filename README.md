@@ -1,7 +1,5 @@
 # SEER — Shell Enhanced Execution & Reasoning
 
-![Built with AI assistance](https://img.shields.io/badge/Built%20with-AI%20assistance-blueviolet?logo=openai&logoColor=white)
-
 **An AI assistant that lives in your terminal.** It sees what just went wrong and tells you how to fix it. It answers shell questions. In brave mode, it does the job for you.
 
 ![seer help explaining a failed tar command](docs/images/seer-help.svg)
@@ -106,6 +104,7 @@ brave_confirm: auto   # when to ask first: auto | trust | always
 | `cmd 2>&1 \| seer` | Explains that command's output |
 | `git log -5 \| seer -b <task>` | Brave mode starting from the piped output |
 | `tail -f app.log \| seer` | Watches a live stream and flags problems every 15s |
+| `seer --tui [name]` | Opens a tmux session with brave mode on and a longer memory ([TUI mode](#tui-mode)) |
 
 **Follow-ups work.** seer remembers your last 3 questions in each terminal for 30 minutes, so you can ask `seer -b find the largest file in ~/Downloads`, then `seer -b back up this file`.
 
@@ -122,6 +121,30 @@ brave_confirm: auto   # when to ask first: auto | trust | always
 **Useful flags:** `-s` streams the answer as it's written · `-r` gives plain text for scripts · `-p <provider>` / `-m <model>` switch the model for one question · `--no-context` skips your terminal output and the conversation so far.
 
 **Diagnostics:** `seer --stats` shows the active model and settings, `seer --context` shows exactly what gets sent, and `seer config` prints your config file.
+
+---
+
+## TUI mode
+
+`seer --tui` opens a tmux session set up for working with seer. It's still your shell: ask with `seer <question>` or `Ctrl+G`, and everything else is a normal command.
+
+- **Brave mode is on.** Read-only commands run freely and everything else asks first, even if your config says `brave_confirm: trust`. `--no-brave` still turns it off for one question.
+- **All panes share a memory.** It holds up to 20 exchanges and lasts until the session closes, when it's deleted. It keeps the same things as [ordinary memory](#everyday-use): not command output.
+- **The status bar shows what seer is using:** session, directory, git state, model, context used and the confirmation mode.
+
+You can run as many sessions as you like. Each has its own memory and status bar. A session is named after its directory, and running `seer --tui` there again returns to it. To have two in one directory, name them: `seer --tui api`. Switch between them with tmux's session list (`Ctrl+B`, then `s`).
+
+It runs on a private tmux server (`tmux -L seer`), which needs tmux 3.2 or newer. It loads your own tmux config, then applies its status bar, and nothing it does affects your other tmux sessions.
+
+```yaml
+# ~/.config/seer/config.yaml
+tui_status: plain           # if you don't use a Nerd Font (the default is nerdfont)
+providers:
+  my-provider:
+    context_window: 200000  # the model's size in tokens, shown in the status bar
+```
+
+Context used is an estimate from the size of the last request and reply, shown with a `~`. Without `context_window`, the status bar shows only that estimate.
 
 ---
 

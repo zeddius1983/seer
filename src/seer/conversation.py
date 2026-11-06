@@ -8,6 +8,9 @@ expire quickly, and only the question, the commands and the final answer are
 kept: never raw command output, which is both the likeliest place for a secret
 and the likeliest place for text trying to steer the model.
 
+A `seer --tui` session is the exception on how much is kept, not on what: all
+its panes share one log, which lasts as long as the session does.
+
 Remembered text is never trusted. It can only inform the model, which goes
 through the same confirmation rules as ever.
 """
@@ -15,16 +18,25 @@ through the same confirmation rules as ever.
 import fcntl
 import json
 import os
+import re
+import subprocess
 import tempfile
 import time
+from functools import lru_cache
 from pathlib import Path
 from typing import Optional, Sequence
 
 from .brave import truncate_output
-from .config import CONVERSATION_DIR
+from .config import CONVERSATION_DIR, in_tui
 
 MAX_EXCHANGES = 3
 MAX_AGE = 30 * 60   # seconds
+# A --tui session's log is deleted when the session closes, and its exchanges
+# don't expire before that. The age is for a log that was never deleted because
+# its server crashed or was killed.
+SESSION_MAX_EXCHANGES = 20
+ABANDONED_LOG_AGE = 24 * 60 * 60
+SESSION_MAX_CHARS = 12000   # what's sent, however many exchanges that allows
 # Brave mode resends the prompt with every step, and local models can have
 # small context windows, so what's kept stays short.
 MAX_QUESTION_CHARS = 500
@@ -39,8 +51,69 @@ _FRAMING = (
 )
 
 
+def session_log_name(server_pid: str, session_id: str) -> str:
+    return f"tui-{server_pid}-{session_id}.json"
+
+
+@lru_cache(maxsize=None)
+def _current_session_id(pane: str) -> Optional[str]:
+    """The session a pane is in now. Cached: a run asks several times."""
+    try:
+        result = subprocess.run(
+            ["tmux", "display-message", "-p", "-t", pane, "#{session_id}"],
+            capture_output=True, text=True, timeout=3,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return result.stdout.strip().lstrip("$") or None if result.returncode == 0 else None
+
+
+def _session_log_name() -> Optional[str]:
+    """This --tui session's log. $TMUX is "socket,server pid,session id", and
+    ids are never reused while the server runs. Its session id is only where the
+    shell started, though: a window moved to another session keeps it, so ask
+    tmux where the pane is now."""
+    if not in_tui():
+        return None
+    parts = os.environ["TMUX"].split(",")
+    if len(parts) < 3:
+        return None
+    pane = os.environ.get("TMUX_PANE")
+    return session_log_name(parts[-2], (pane and _current_session_id(pane)) or parts[-1])
+
+
 def _log_path() -> Path:
-    return CONVERSATION_DIR / f"{os.getsid(0)}.json"
+    return CONVERSATION_DIR / (_session_log_name() or f"{os.getsid(0)}.json")
+
+
+def _server_running(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)   # signal 0 only checks
+    except PermissionError:
+        return True   # it's there, and someone else's
+    except (OSError, OverflowError):
+        return False
+    return True
+
+
+def _is_abandoned(path: Path) -> bool:
+    """Whether a --tui log's server is gone: an idle session may still be open."""
+    m = re.fullmatch(r"tui-(\d+)-\d+\.json", path.name)
+    return not (m and _server_running(int(m.group(1))))
+
+
+def _fit_budget(exchanges: list[dict]) -> list[dict]:
+    """The newest exchanges that fit in SESSION_MAX_CHARS as sent, and always the last."""
+    kept = exchanges
+    while len(kept) > 1 and len(_render(kept)) > SESSION_MAX_CHARS:
+        kept = kept[1:]
+    return kept
+
+
+def describe_limits() -> str:
+    if _session_log_name():
+        return f"this session, last {SESSION_MAX_EXCHANGES} exchanges within {SESSION_MAX_CHARS:,} characters"
+    return f"last {MAX_EXCHANGES} exchanges, {MAX_AGE // 60} min"
 
 
 def _is_exchange(e) -> bool:
@@ -56,7 +129,7 @@ def _load() -> list[dict]:
     """This terminal's unexpired exchanges, oldest first."""
     try:
         exchanges = json.loads(_log_path().read_text(encoding="utf-8"))
-        cutoff = time.time() - MAX_AGE
+        cutoff = 0 if _session_log_name() else time.time() - MAX_AGE
         return [e for e in exchanges if _is_exchange(e) and e["time"] >= cutoff]
     except (OSError, ValueError, TypeError):
         return []   # no log, or an unreadable one: start afresh
@@ -67,6 +140,10 @@ def earlier() -> Optional[str]:
     exchanges = _load()
     if not exchanges:
         return None
+    return _render(_fit_budget(exchanges) if _session_log_name() else exchanges)
+
+
+def _render(exchanges: list[dict]) -> str:
     parts = [_FRAMING]
     for n, e in enumerate(exchanges, 1):
         lines = [f"[{n}] In {e['cwd']}, the user asked: {e['question']}"]
@@ -104,7 +181,8 @@ def record(question: str, answer: str, commands: Sequence[str] = ()) -> None:
         lock = os.open(CONVERSATION_DIR, os.O_RDONLY)
         try:
             fcntl.flock(lock, fcntl.LOCK_EX)
-            _write(_log_path(), [*_load(), exchange][-MAX_EXCHANGES:])
+            keep = SESSION_MAX_EXCHANGES if _session_log_name() else MAX_EXCHANGES
+            _write(_log_path(), [*_load(), exchange][-keep:])
             _prune()
         finally:
             os.close(lock)
@@ -128,10 +206,12 @@ def _write(path: Path, exchanges: list[dict]) -> None:
 
 def _prune() -> None:
     """Delete expired logs, so closed terminals' answers don't stay on disk."""
-    cutoff = time.time() - MAX_AGE
+    now = time.time()
     for path in CONVERSATION_DIR.iterdir():
+        session_log = path.name.startswith("tui-")
+        max_age = ABANDONED_LOG_AGE if session_log else MAX_AGE
         try:
-            if path.stat().st_mtime < cutoff:
+            if path.stat().st_mtime < now - max_age and (not session_log or _is_abandoned(path)):
                 path.unlink()
         except OSError:
             pass   # another seer got there first

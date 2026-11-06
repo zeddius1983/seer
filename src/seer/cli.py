@@ -19,8 +19,9 @@ from rich.syntax import Syntax
 from rich.table import Table
 
 from . import __version__, conversation, trace
+from . import tui as tui_mod
 from .config import load_config, save_default_config, CONFIG_PATH, DO_SYSTEM_PROMPT, BRAVE_SYSTEM_PROMPT
-from .config import CONTEXT_FILE, CLI_COMMANDS, resolve_cli_command
+from .config import CONTEXT_FILE, CLI_COMMANDS, in_tui, resolve_cli_command
 from .system_info import format_for_prompt, get_system_info
 from .context import get_context, read_stdin_batches, read_stdin_to_eof, reattach_tty, _stdin_has_data, _stdin_is_piped, _read_stdin_until_idle
 from .providers import get_provider
@@ -290,11 +291,17 @@ def _at_terminal() -> bool:
     return sys.stdout.isatty()
 
 
-def _provider(pcfg):
-    """The provider for pcfg, wrapped to record each call when tracing (e2e/)."""
+def _provider(cfg, pcfg):
+    """The provider for pcfg, wrapped to record each call when tracing (e2e/)
+    and to report it to the status bar in a --tui session."""
     trace.event("provider", name=pcfg.name, type=pcfg.type, model=pcfg.model,
                 fallback_models=pcfg.fallback_models)
     provider = get_provider(pcfg)
+    if in_tui():
+        inner = provider
+        provider = tui_mod.MeteredProvider(inner, lambda tokens: tui_mod.push_status(
+            model_label(pcfg, inner), tokens, pcfg.context_window, cfg.brave_confirm, cfg.tui_status,
+        ))
     return trace.TracedProvider(provider) if trace.enabled() else provider
 
 
@@ -306,7 +313,7 @@ def _report_error(e: Exception) -> None:
 def stream_response(system: str, prompt: str, cfg, raw: bool = False, stream: bool = False) -> str:
     """Show the model's answer as configured, and return it."""
     pcfg = cfg.get_active_provider()
-    provider = _provider(pcfg)
+    provider = _provider(cfg, pcfg)
     buffer = ""
 
     if raw:
@@ -381,6 +388,7 @@ Examples:
   git pull-request 2>&1 | seer # pipe any output as context
   seer config                  # show/init config file
   seer --stats                 # show provider, model, and system info
+  seer --tui [name]            # open a tmux session where seer remembers more
 """
 
 
@@ -401,6 +409,7 @@ Examples:
 @click.option("--model", "-m", default=None, help="Override the model.")
 @click.option("--stats", is_flag=True, help="Show provider, model, context size, and system info.")
 @click.option("--context", "show_context", is_flag=True, help="Show the full system prompt and captured terminal context.")
+@click.option("--tui", is_flag=True, help="Open a tmux session for seer: brave by default, with a status bar and a shared memory. Named after this directory unless you give it a name.")
 @click.option(
     "--shell-path",
     type=click.Choice(["bash", "zsh"]),
@@ -409,7 +418,7 @@ Examples:
 )
 @click.version_option(__version__, "--version", "-V", prog_name="seer")
 @click.pass_context
-def main(ctx, query, no_context, raw, brave, stream, provider, model, stats, show_context, shell_path):
+def main(ctx, query, no_context, raw, brave, stream, provider, model, stats, show_context, tui, shell_path):
     # --shell-path: print path to the integration script
     if shell_path:
         script = Path(__file__).parent / "shell" / f"seer.{shell_path}"
@@ -422,6 +431,10 @@ def main(ctx, query, no_context, raw, brave, stream, provider, model, stats, sho
 
     if show_context:
         _cmd_context(provider, model)
+        return
+
+    if tui:
+        _cmd_tui(query, provider, model)
         return
 
     args = list(query)
@@ -464,7 +477,7 @@ def main(ctx, query, no_context, raw, brave, stream, provider, model, stats, sho
         try:
             system = DO_SYSTEM_PROMPT + "\n\n" + format_for_prompt()
             pcfg = cfg.get_active_provider()
-            llm = _provider(pcfg)
+            llm = _provider(cfg, pcfg)
             buffer = ""
             console.print()
             status = _Status(pcfg, llm)
@@ -584,7 +597,7 @@ def _cmd_brave(
 ) -> None:
     """Brave mode: let the LLM run commands, then render its final answer."""
     pcfg = cfg.get_active_provider()
-    llm = _provider(pcfg)
+    llm = _provider(cfg, pcfg)
     system = (
         BRAVE_SYSTEM_PROMPT + "\n\n" + format_for_prompt()
         + f"\n\nWorking directory: {os.getcwd()}"
@@ -694,6 +707,47 @@ def _cmd_watch(first_batch: str, focus: Optional[str], cfg, raw: bool, stream: b
         err_console.print("\n[dim]Watch mode ended.[/dim]")
 
 
+def _cmd_tui(words, provider_override, model_override) -> None:
+    """Open the tmux session for this directory or name, creating it if needed."""
+    if provider_override or model_override:
+        err_console.print(
+            "[red]seer --tui takes no -p or -m.[/red] Set the provider in your config, "
+            "or use them on a question in the session."
+        )
+        sys.exit(1)
+    if any(word.startswith("-") for word in words):
+        err_console.print(f"[red]Unknown option:[/red] {words[0]}")
+        sys.exit(1)
+    problem = tui_mod.tmux_problem()
+    if problem:
+        err_console.print(f"[red]{problem}[/red]", highlight=False)
+        sys.exit(1)
+    if not (sys.stdin.isatty() and sys.stdout.isatty()):
+        err_console.print("[red]seer --tui needs a terminal.[/red]")
+        sys.exit(1)
+    try:
+        cfg = load_config()
+    except Exception as e:
+        err_console.print(f"[red]Config error:[/red] {e}")
+        sys.exit(1)
+    # Before any question, the status bar shows what seer would use. A provider
+    # that isn't up yet is no reason not to open the session.
+    try:
+        pcfg = cfg.get_active_provider()
+        label, window = model_label(pcfg), pcfg.context_window
+    except ValueError:
+        label, window = "no model", None
+    # The session is brave however this shell is configured.
+    confirm = "auto" if cfg.brave_confirm == "trust" else cfg.brave_confirm
+    name = tui_mod.session_name(words)
+    try:
+        tui_mod.create_session(name, label, window, confirm, cfg.tui_status)
+    except subprocess.CalledProcessError as e:
+        err_console.print(f"[red]Could not start tmux:[/red] {(e.stderr or '').strip()}", highlight=False)
+        sys.exit(1)
+    sys.exit(tui_mod.attach_session(name))
+
+
 def _cmd_config():
     if CONFIG_PATH.exists():
         console.print(f"[bold]Config file:[/bold] {CONFIG_PATH}\n")
@@ -795,10 +849,7 @@ def _cmd_stats(provider_override, model_override):
         t.add_row("Base URL", pcfg.base_url or "[dim]default[/dim]")
     t.add_row("", "")
     t.add_row("Brave mode", f"{'on' if cfg.brave else 'off'} · confirm: {cfg.brave_confirm}")
-    t.add_row(
-        "Conversation",
-        f"last {conversation.MAX_EXCHANGES} exchanges, {conversation.MAX_AGE // 60} min" if cfg.memory else "off",
-    )
+    t.add_row("Conversation", conversation.describe_limits() if cfg.memory else "off")
     t.add_row("Context limit", f"{cfg.context_lines} lines (max)")
     t.add_row("Context captured", f"{context_lines_actual} lines · {context_chars} chars · ~{est_tokens} tokens")
     t.add_row("System prompt", f"~{system_tokens} tokens")
