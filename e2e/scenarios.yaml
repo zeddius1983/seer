@@ -34,6 +34,8 @@
 #     commands_exclude  regexes no executed command may match
 #     files_exist       paths (relative to the project) that must exist afterwards
 #     files_absent      paths that must not exist afterwards
+#     copied_next_to    paths that must have an identical file beside them, under
+#                       any name (for a backup, whose name is the model's choice)
 #   expect    plain-language expectations for the grader (GRADING.md); things a
 #             script can't judge, like "doesn't invent files"
 
@@ -273,6 +275,7 @@
     mode: brave
     min_confirmations: 1
     commands_include: ['\bcp\b.*archive\.gz']
+    copied_next_to: [data/archive.gz]
   expect:
     - The first run finds data/archive.gz.
     - The second works out that "that file" means data/archive.gz without asking or searching for it again, and copies it.
@@ -283,9 +286,12 @@
   checks:
     mode: plain
     answer_matches:
-      - '\bls\b'
-      - '(?<![\w-])-[a-zA-Z]*S[a-zA-Z]*\b|--sort[= ]size\b'    # still sorted by size
-      - '(?<![\w-])-[a-zA-Z]*r[a-zA-Z]*\b|--reverse\b|\btac\b'  # and reversed
+      # One ls command, sorted by size and reversed. Each lookahead stays within
+      # that command: it stops at punctuation and at the next ls.
+      - |-
+        (?x) \bls\b
+        (?= (?:(?!\bls\b)[^\n`;,])* (?<![\w-]) (?: -[a-zA-Z]*S[a-zA-Z]*\b | --sort[= ]size\b ) )
+        (?= (?:(?!\bls\b)[^\n`;,])* (?<![\w-]) (?: -[a-zA-Z]*r[a-zA-Z]*\b | --reverse\b | \btac\b ) )
   expect:
     - The second answer continues from the first, showing ls -S with the reverse flag (e.g. ls -lSr).
 

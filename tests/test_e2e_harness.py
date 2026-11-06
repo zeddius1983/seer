@@ -38,6 +38,11 @@ def test_unknown_check_is_rejected(tmp_path):
     ("ls -r", False),              # reverses name order, not size order
     ("ls -SR", False),             # -R is recursive, not reverse
     ("ls -S well-rounded", False),
+    ("Use `ls -r` to reverse alphabetical order; use `ls -S` to sort by size", False),
+    ("ls -r reverses names, ls -S sorts by size", False),
+    ("ls -r or ls -S", False),
+    ("Sort with `ls -S`.\n\nReverse with `ls -r`.", False),
+    ("Use this:\n\n```bash\nls -lhSr\n```", True),
 ])
 def test_followup_plain_needs_a_reversed_size_sort(tmp_path, answer, passes):
     scenario = next(sc for sc in run.load_scenarios() if sc["id"] == "followup-plain")
@@ -45,6 +50,40 @@ def test_followup_plain_needs_a_reversed_size_sort(tmp_path, answer, passes):
     metrics = {"answer": answer, "errors": []}
     [check] = [r for r in run.evaluate(wanted, metrics, tmp_path, False) if r["check"] == "answer_matches"]
     assert check["ok"] is passes
+
+
+class TestCopiedNextTo:
+    @staticmethod
+    def _ok(project):
+        checks = {"copied_next_to": ["data/a.gz"]}
+        metrics = {"answer": "", "errors": []}
+        [check] = [r for r in run.evaluate(checks, metrics, project, False) if r["check"] == "copied_next_to"]
+        return check["ok"]
+
+    @pytest.fixture
+    def data(self, tmp_path):
+        (tmp_path / "data").mkdir()
+        (tmp_path / "data" / "a.gz").write_bytes(b"original")
+        return tmp_path / "data"
+
+    def test_identical_file_under_any_name_passes(self, data):
+        (data / "a.gz.backup-today").write_bytes(b"original")
+        assert self._ok(data.parent)
+
+    def test_no_copy_fails(self, data):
+        assert not self._ok(data.parent)
+
+    def test_different_contents_fail(self, data):
+        (data / "a.gz.bak").write_bytes(b"truncat")
+        assert not self._ok(data.parent)
+
+    def test_copy_elsewhere_fails(self, data):
+        (data.parent / "a.gz").write_bytes(b"original")
+        assert not self._ok(data.parent)
+
+    def test_missing_original_fails(self, data):
+        (data / "a.gz").rename(data / "b.gz")
+        assert not self._ok(data.parent)
 
 
 def test_choose_by_id_or_feature():
