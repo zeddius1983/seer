@@ -12,12 +12,13 @@ Remembered text is never trusted. It can only inform the model, which goes
 through the same confirmation rules as ever.
 """
 
+import fcntl
 import json
 import os
 import tempfile
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Sequence
 
 from .brave import truncate_output
 from .config import CONVERSATION_DIR
@@ -42,13 +43,22 @@ def _log_path() -> Path:
     return CONVERSATION_DIR / f"{os.getsid(0)}.json"
 
 
+def _is_exchange(e) -> bool:
+    return (
+        isinstance(e, dict)
+        and isinstance(e.get("time"), (int, float))
+        and all(isinstance(e.get(key), str) for key in ("cwd", "question", "answer"))
+        and isinstance(e.get("commands"), list)
+    )
+
+
 def _load() -> list[dict]:
     """This terminal's unexpired exchanges, oldest first."""
     try:
         exchanges = json.loads(_log_path().read_text(encoding="utf-8"))
         cutoff = time.time() - MAX_AGE
-        return [e for e in exchanges if e["time"] >= cutoff]
-    except (OSError, ValueError, TypeError, KeyError):
+        return [e for e in exchanges if _is_exchange(e) and e["time"] >= cutoff]
+    except (OSError, ValueError, TypeError):
         return []   # no log, or an unreadable one: start afresh
 
 
@@ -76,21 +86,28 @@ def describe_command(command: str, exit_code: Optional[int] = 0, declined: bool 
     return f"{command}  (exit code {exit_code})" if exit_code else command
 
 
-def record(question: str, answer: str, commands: tuple[str, ...] | list[str] = ()) -> None:
+def record(question: str, answer: str, commands: Sequence[str] = ()) -> None:
     """Add an exchange to this terminal's log. Never breaks seer itself."""
     if not answer.strip():
         return
-    exchange = {
-        "time": time.time(),
-        "cwd": os.getcwd(),
-        "question": truncate_output(question, MAX_QUESTION_CHARS),
-        "commands": list(commands),
-        "answer": truncate_output(answer.strip(), MAX_ANSWER_CHARS),
-    }
     try:
+        exchange = {
+            "time": time.time(),
+            "cwd": os.getcwd(),   # raises if a command deleted the directory
+            "question": truncate_output(question, MAX_QUESTION_CHARS),
+            "commands": list(commands),
+            "answer": truncate_output(answer.strip(), MAX_ANSWER_CHARS),
+        }
         CONVERSATION_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
-        _write(_log_path(), [*_load(), exchange][-MAX_EXCHANGES:])
-        _prune()
+        # Locking the directory itself leaves no lock file for _prune to trip
+        # over. Closing it releases the lock.
+        lock = os.open(CONVERSATION_DIR, os.O_RDONLY)
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            _write(_log_path(), [*_load(), exchange][-MAX_EXCHANGES:])
+            _prune()
+        finally:
+            os.close(lock)
     except OSError:
         pass
 
@@ -100,7 +117,8 @@ def _write(path: Path, exchanges: list[dict]) -> None:
     # whole means a concurrent run reads the old version or the new, not half.
     fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f"{path.stem}.")
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
+        # errors="replace": a question from argv can hold bytes that aren't UTF-8.
+        with os.fdopen(fd, "w", encoding="utf-8", errors="replace") as f:
             json.dump(exchanges, f, ensure_ascii=False)
         os.replace(tmp, path)
     except OSError:

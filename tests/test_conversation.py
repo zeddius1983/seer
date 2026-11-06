@@ -1,5 +1,6 @@
 """Tests for remembering earlier questions and answers between seer runs."""
 
+import multiprocessing
 import os
 import stat
 import time
@@ -76,7 +77,11 @@ class TestLog:
         conversation.record("q", "  \n")
         assert not log_dir.exists()
 
-    @pytest.mark.parametrize("content", ["not json", "{}", "[1]", '[{"time": "soon"}]'])
+    @pytest.mark.parametrize("content", [
+        "not json", "5", "{}", "[1]", '[{"time": "soon"}]',
+        '[{"time": 9e99}]',
+        '[{"time": 9e99, "cwd": "/", "question": "q", "answer": "a", "commands": null}]',
+    ])
     def test_corrupt_log_starts_afresh(self, log_dir, content):
         conversation.record("q", "a")
         [log] = log_dir.iterdir()
@@ -84,6 +89,35 @@ class TestLog:
         assert conversation.earlier() is None
         conversation.record("new", "a")
         assert "new" in conversation.earlier()
+
+    def test_malformed_entry_is_dropped_and_valid_ones_kept(self, log_dir):
+        conversation.record("kept", "a")
+        [log] = log_dir.iterdir()
+        log.write_text(log.read_text().replace("[", '[{"time": 9e99}, ', 1))
+        assert "kept" in conversation.earlier()
+
+    def test_deleted_working_directory_never_breaks_seer(self, tmp_path, monkeypatch):
+        gone = tmp_path / "gone"
+        gone.mkdir()
+        monkeypatch.chdir(gone)
+        gone.rmdir()
+        conversation.record("q", "a")
+        assert conversation.earlier() is None
+
+    def test_question_that_is_not_utf8_never_breaks_seer(self):
+        conversation.record(b"caf\xe9".decode("utf-8", "surrogateescape"), "a")
+        assert "caf?" in conversation.earlier()
+
+    def test_concurrent_saves_keep_every_exchange(self, monkeypatch):
+        monkeypatch.setattr(conversation, "MAX_EXCHANGES", 100)
+        fork = multiprocessing.get_context("fork")
+        runs = [fork.Process(target=conversation.record, args=(f"question {n};", "a")) for n in range(16)]
+        for run in runs:
+            run.start()
+        for run in runs:
+            run.join()
+        text = conversation.earlier()
+        assert [n for n in range(16) if f"question {n};" not in text] == []
 
     def test_unwritable_location_never_breaks_seer(self, tmp_path, monkeypatch):
         (tmp_path / "file").write_text("")

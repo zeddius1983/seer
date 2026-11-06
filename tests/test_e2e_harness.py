@@ -25,6 +25,22 @@ def test_unknown_check_is_rejected(tmp_path):
         run.load_scenarios(path)
 
 
+@pytest.mark.parametrize("answer, passes", [
+    ("Use `ls -lSr`", True),
+    ("ls -Sr", True),
+    ("ls -S -r", True),
+    ("`ls --reverse -S`", True),
+    ("Use `ls -S`", False),
+    ("ls well-rounded", False),
+])
+def test_followup_plain_accepts_bundled_short_options(tmp_path, answer, passes):
+    scenario = next(sc for sc in run.load_scenarios() if sc["id"] == "followup-plain")
+    wanted = {"answer_matches": scenario["checks"]["answer_matches"]}
+    metrics = {"answer": answer, "errors": []}
+    [check] = [r for r in run.evaluate(wanted, metrics, tmp_path, False) if r["check"] == "answer_matches"]
+    assert check["ok"] is passes
+
+
 def test_choose_by_id_or_feature():
     scenarios = [{"id": "a", "features": ["brave"]}, {"id": "b", "features": ["plain"]}]
     assert [s["id"] for s in run.choose(scenarios, ["brave"])] == ["a"]

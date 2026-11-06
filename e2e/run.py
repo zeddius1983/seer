@@ -55,7 +55,7 @@ _PROMPT = re.compile(rb"Run this command\? \[Y/n/e\]")
 _ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)|\x1b[()][0-9A-B]")
 _EDIT_PROMPT = re.compile(rb"\$ ")   # the inline editor's prompt after answering e
 _CHECKS = {
-    "mode", "error", "answer_contains", "answer_excludes", "output_contains", "output_excludes",
+    "mode", "error", "answer_contains", "answer_excludes", "answer_matches", "output_contains", "output_excludes",
     "max_llm_calls", "max_commands", "confirmations", "min_confirmations",
     "commands_include", "commands_exclude", "files_exist", "files_absent",
 }
@@ -401,6 +401,9 @@ def evaluate(checks: dict, m: dict, project: Path, timed_out: bool, output: str 
         elif name == "answer_excludes":
             found = [w for w in want if str(w).lower() in answer]
             add(name, not found, f"found: {found}" if found else "")
+        elif name == "answer_matches":
+            missing = [p for p in want if not re.search(p, m["answer"], re.IGNORECASE)]
+            add(name, not missing, f"none matched: {missing}" if missing else "")
         elif name == "output_contains":
             missing = [w for w in want if not any(alt.lower() in screen for alt in str(w).split("|"))]
             add(name, not missing, f"missing: {missing}" if missing else "")
